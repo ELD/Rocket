@@ -351,6 +351,25 @@ macro_rules! pub_request_impl {
         *self._body_mut() = body.as_ref().into();
     }
 
+    /// Create a local request with [`LocalForm`] data
+    ///
+    /// When a request is dispatched after this method is called, it sets the
+    /// header and body contents according to the contents of the [`LocalForm`]
+    /// object.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    #[doc = $import]
+    /// # Client::_test(|_, request, _| {
+    /// let form: LocalForm = LocalForm::new();
+    /// request.form(form);
+    /// # });
+    /// ```
+    pub fn form(self, form: impl Into<LocalForm<'c>>) -> LocalRequest<'c> {
+        self._form(form.into())
+    }
+
     /// Dispatches the request, returning the response.
     ///
     /// This method consumes `self` and is the preferred mechanism for

@@ -1,7 +1,8 @@
 use std::fmt;
 
-use crate::{Request, http::Method, local::asynchronous};
 use crate::http::uri::Origin;
+use crate::local::form::LocalForm;
+use crate::{http::Method, local::asynchronous, Request};
 
 use super::{Client, LocalResponse};
 
@@ -36,7 +37,8 @@ pub struct LocalRequest<'c> {
 impl<'c> LocalRequest<'c> {
     #[inline]
     pub(crate) fn new<'u: 'c, U>(client: &'c Client, method: Method, uri: U) -> Self
-        where U: TryInto<Origin<'u>> + fmt::Display
+    where
+        U: TryInto<Origin<'u>> + fmt::Display,
     {
         let inner = asynchronous::LocalRequest::new(client.inner(), method, uri);
         Self { inner, client }
@@ -58,11 +60,22 @@ impl<'c> LocalRequest<'c> {
 
     fn _dispatch(self) -> LocalResponse<'c> {
         let inner = self.client.block_on(self.inner.dispatch());
-        LocalResponse { inner, client: self.client }
+        LocalResponse {
+            inner,
+            client: self.client,
+        }
     }
 
-    pub_request_impl!("# use rocket::local::blocking::Client;\n\
-        use rocket::local::blocking::LocalRequest;");
+    fn _form(mut self, form: LocalForm<'c>) -> LocalRequest<'c> {
+        self.inner = self.inner._form(form);
+        self
+    }
+
+    pub_request_impl!(
+        "# use rocket::local::blocking::Client;\n\
+        # use rocket::local::form::LocalForm;\n\
+        use rocket::local::blocking::LocalRequest;"
+    );
 }
 
 impl std::fmt::Debug for LocalRequest<'_> {

@@ -1,8 +1,9 @@
 use std::fmt;
 
-use crate::{Request, Data};
-use crate::http::{Status, Method};
 use crate::http::uri::Origin;
+use crate::http::{Method, Status};
+use crate::local::form::LocalForm;
+use crate::{Data, Request};
 
 use super::{Client, LocalResponse};
 
@@ -31,8 +32,8 @@ use super::{Client, LocalResponse};
 /// # });
 /// ```
 pub struct LocalRequest<'c> {
-    pub(in super) client: &'c Client,
-    pub(in super) request: Request<'c>,
+    pub(super) client: &'c Client,
+    pub(super) request: Request<'c>,
     data: Vec<u8>,
     // The `Origin` on the right is INVALID! It should _not_ be used!
     uri: Result<Origin<'c>, Origin<'static>>,
@@ -40,7 +41,8 @@ pub struct LocalRequest<'c> {
 
 impl<'c> LocalRequest<'c> {
     pub(crate) fn new<'u: 'c, U>(client: &'c Client, method: Method, uri: U) -> Self
-        where U: TryInto<Origin<'u>> + fmt::Display
+    where
+        U: TryInto<Origin<'u>> + fmt::Display,
     {
         // Try to parse `uri` into an `Origin`, storing whether it's good.
         let uri_str = uri.to_string();
@@ -59,7 +61,12 @@ impl<'c> LocalRequest<'c> {
             })
         }
 
-        LocalRequest { client, request, uri: try_origin, data: vec![] }
+        LocalRequest {
+            client,
+            request,
+            uri: try_origin,
+            data: vec![],
+        }
     }
 
     pub(crate) fn _request(&self) -> &Request<'c> {
@@ -87,16 +94,18 @@ impl<'c> LocalRequest<'c> {
                 error!("invalid request URI: {:?}", invalid.path());
                 return LocalResponse::new(self.request, move |req| {
                     rocket.handle_error(Status::BadRequest, req)
-                }).await
+                })
+                .await;
             }
         }
 
         // Actually dispatch the request.
         let mut data = Data::local(self.data);
-        let token = rocket.preprocess_request(&mut self.request, &mut data).await;
-        let response = LocalResponse::new(self.request, move |req| {
-            rocket.dispatch(token, req, data)
-        }).await;
+        let token = rocket
+            .preprocess_request(&mut self.request, &mut data)
+            .await;
+        let response =
+            LocalResponse::new(self.request, move |req| rocket.dispatch(token, req, data)).await;
 
         // If the client is tracking cookies, updates the internal cookie jar
         // with the changes reflected by `response`.
@@ -119,7 +128,14 @@ impl<'c> LocalRequest<'c> {
         response
     }
 
+    pub(crate) fn _form(mut self, form: LocalForm<'c>) -> LocalRequest<'c> {
+        self.data = form.body_data();
+        self.request.replace_header(form.content_type());
+        self
+    }
+
     pub_request_impl!("# use rocket::local::asynchronous::Client;\n\
+        # use rocket::local::form::LocalForm;
         use rocket::local::asynchronous::LocalRequest;" async await);
 }
 
