@@ -234,6 +234,8 @@ pub use rocket;
 #[cfg(feature = "deadpool_redis")] pub use deadpool_redis;
 #[cfg(feature = "mongodb")] pub use mongodb;
 #[cfg(feature = "sqlx")] pub use sqlx;
+#[cfg(feature = "")] pub use diesel_async_mysql;
+#[cfg(feature = "")] pub use diesel_async_postgres;
 
 mod database;
 mod error;

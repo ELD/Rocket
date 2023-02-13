@@ -24,6 +24,9 @@ sqlx_sqlite = ["sqlx", "sqlx/sqlite"]
 sqlx_mssql = ["sqlx", "sqlx/mssql"]
 sqlx_macros = ["sqlx/macros"]
 # implicit features: mongodb
+# Async diesel features
+diesel_async_mysql = ["diesel", "diesel-async", "diesel-async/mysql"]
+diesel_async_postgres = ["diesel", "diesel-async", "diesel-async/postgres"]
 
 [dependencies.rocket]
 path = "../../../core/lib"
@@ -62,6 +65,16 @@ optional = true
 version = "0.6"
 default-features = false
 features = ["runtime-tokio-rustls"]
+optional = true
+
+[dependencies.diesel]
+version = "2.0"
+default-features = false
+optional = true
+
+[dependencies.diesel-async]
+version = "0.2"
+default-features = false
 optional = true
 
 [dev-dependencies.rocket]
