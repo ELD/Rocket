@@ -328,7 +328,6 @@ impl AdHoc {
             }
         }
 
-        #[crate::async_trait]
         impl Fairing for Normalizer {
             fn info(&self) -> Info {
                 Info { name: "URI Normalizer", kind: Kind::Ignite | Kind::Liftoff | Kind::Request }
@@ -399,7 +398,6 @@ impl AdHoc {
     }
 }
 
-#[crate::async_trait]
 impl Fairing for AdHoc {
     fn info(&self) -> Info {
         let kind = match self.kind {
