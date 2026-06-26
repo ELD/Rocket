@@ -1,0 +1,31 @@
+[package]
+name = "rocket_csrf"
+version = "0.1.0"
+authors = ["Sergio Benitez <sb@sergio.bz>"]
+description = "CSRF protection for Rocket."
+documentation = "https://api.rocket.rs/master/rocket_csrf/"
+homepage = "https://rocket.rs"
+repository = "https://github.com/rwf2/Rocket/tree/master/contrib/csrf"
+readme = "README.md"
+keywords = ["rocket", "web", "framework", "csrf", "security"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+rust-version = "1.75"
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = "0.22"
+blake3 = "1.5"
+rand = "0.9"
+subtle = "2.5"
+
+[dependencies.rocket]
+version = "0.6.0-dev"
+path = "../../core/lib"
+default-features = false
+features = ["secrets"]
+
+[package.metadata.docs.rs]
+all-features = true

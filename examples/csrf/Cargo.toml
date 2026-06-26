@@ -1,0 +1,10 @@
+[package]
+name = "csrf"
+version = "0.0.0"
+workspace = "../"
+edition = "2021"
+publish = false
+
+[dependencies]
+rocket = { path = "../../core/lib", features = ["secrets", "json"] }
+rocket_csrf = { path = "../../contrib/csrf" }

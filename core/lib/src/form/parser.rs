@@ -1,14 +1,15 @@
 use multer::Multipart;
-use either::Either;
-
 use crate::request::{Request, local_cache_once};
 use crate::data::{Data, Limits, Outcome};
-use crate::http::{RawStr, Status};
+use crate::http::{ContentType, RawStr, Status};
 use crate::form::prelude::*;
 
 type Result<'r, T> = std::result::Result<T, Error<'r>>;
 
-type Field<'r, 'i> = Either<ValueField<'r>, DataField<'r, 'i>>;
+pub enum ParsedField<'r, 'i> {
+    Value(ValueField<'r>),
+    Data(DataField<'r, 'i>),
+}
 
 pub struct MultipartParser<'r, 'i> {
     request: &'r Request<'i>,
@@ -82,10 +83,10 @@ impl<'r, 'i> Parser<'r, 'i> {
         }))
     }
 
-    pub async fn next(&mut self) -> Option<Result<'r, Field<'r, 'i>>> {
+    pub async fn next(&mut self) -> Option<Result<'r, ParsedField<'r, 'i>>> {
         match self {
             Parser::Multipart(ref mut p) => p.next().await,
-            Parser::RawStr(ref mut p) => p.next().map(|f| Ok(Either::Left(f)))
+            Parser::RawStr(ref mut p) => p.next().map(|f| Ok(ParsedField::Value(f)))
         }
     }
 }
@@ -153,7 +154,7 @@ mod raw_str_parse_tests {
 impl<'r, 'i> MultipartParser<'r, 'i> {
     /// Returns `None` when there are no further fields. Otherwise tries to
     /// parse the next multipart form field and returns the result.
-    async fn next(&mut self) -> Option<Result<'r, Field<'r, 'i>>> {
+    async fn next(&mut self) -> Option<Result<'r, ParsedField<'r, 'i>>> {
         if self.done {
             return None;
         }
@@ -167,9 +168,12 @@ impl<'r, 'i> MultipartParser<'r, 'i> {
             }
         };
 
-        // A field with a content-type is data; one without is "value".
+        // A field with a content-type or file name is data; one without is
+        // "value".
         trace!(?field, "multipart field");
         let content_type = field.content_type().and_then(|m| m.as_ref().parse().ok());
+        let has_file_name = field.file_name().is_some();
+        let content_type = content_type.or_else(|| has_file_name.then_some(ContentType::Binary));
         let field = if let Some(content_type) = content_type {
             let (name, file_name) = match (field.name(), field.file_name()) {
                 (None, None) => ("", None),
@@ -181,7 +185,7 @@ impl<'r, 'i> MultipartParser<'r, 'i> {
                 }
             };
 
-            Either::Right(DataField {
+            ParsedField::Data(DataField {
                 content_type,
                 request: self.request,
                 name: NameView::new(name),
@@ -200,7 +204,7 @@ impl<'r, 'i> MultipartParser<'r, 'i> {
             };
 
             let name_val = self.buffer.push_split(buf, len);
-            Either::Left(ValueField::from(name_val))
+            ParsedField::Value(ValueField::from(name_val))
         };
 
         Some(Ok(field))

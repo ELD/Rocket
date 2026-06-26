@@ -400,6 +400,9 @@ pub use strict::*;
 pub use lenient::*;
 
 #[doc(hidden)]
+pub use parser::{ParsedField, Parser, RawStrParser};
+
+#[doc(hidden)]
 pub mod prelude {
     pub use super::*;
     pub use super::name::*;

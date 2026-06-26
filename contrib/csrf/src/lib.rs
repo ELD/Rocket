@@ -1,0 +1,525 @@
+//! Explicit CSRF protection for Rocket.
+//!
+//! This crate provides explicit, opt-in CSRF protection for two common request
+//! styles:
+//!
+//!   * HTML forms via [`CsrfToken`] and [`CsrfForm<T>`]
+//!   * JavaScript-driven API requests via [`XsrfToken`] and [`VerifiedXsrf`]
+//!
+//! Internally, both flows use signed, session-bound tokens issued by the
+//! server. Tokens are scoped to a request context, so a token minted for form
+//! submission cannot be replayed as an XSRF header token, and vice versa.
+//!
+//! ## Usage
+//!
+//! Attach [`Csrf::fairing()`] and use the guards that match your routes.
+//!
+//! ### Form Workflow
+//!
+//! Use [`CsrfToken`] on a safe route to mint a token and render it into a
+//! hidden form field named [`FORM_FIELD`]. Then use [`CsrfForm<T>`] on the
+//! unsafe route to validate the token and parse the remainder of the form as
+//! `T`:
+//!
+//! ```rust
+//! # #[macro_use] extern crate rocket;
+//! use rocket::form::FromForm;
+//! use rocket::response::content::RawHtml;
+//! use rocket_csrf::{Csrf, CsrfForm, CsrfToken};
+//!
+//! #[derive(FromForm)]
+//! struct Login<'r> {
+//!     username: &'r str,
+//!     password: &'r str,
+//! }
+//!
+//! #[get("/login")]
+//! fn login(csrf: CsrfToken) -> RawHtml<String> {
+//!     RawHtml(format!(
+//!         r#"<form action=\"/login\" method=\"post\">
+//!             <input type=\"hidden\" name=\"_authenticity_token\" value=\"{csrf}\">
+//!             <input type=\"text\" name=\"username\">
+//!             <input type=\"password\" name=\"password\">
+//!             <button type=\"submit\">Sign In</button>
+//!         </form>"#,
+//!     ))
+//! }
+//!
+//! #[post("/login", data = "<form>")]
+//! fn submit(form: CsrfForm<Login<'_>>) -> &'static str {
+//!     let _login = form.into_inner();
+//!     "ok"
+//! }
+//!
+//! # #[launch]
+//! fn rocket() -> _ {
+//!     rocket::build()
+//!         .attach(Csrf::fairing())
+//!         .mount("/", routes![login, submit])
+//! }
+//! ```
+//!
+//! `CsrfForm<T>` behaves similarly to `rocket::form::Form<T>`: it forwards when
+//! the content-type is not a form content-type, preserves ordinary form parsing
+//! errors, and returns `403 Forbidden` for CSRF failures.
+//!
+//! ### JavaScript / XSRF Workflow
+//!
+//! For JavaScript clients, use [`XsrfToken`] on a safe route or bootstrap
+//! endpoint. This queues a readable [`XSRF_COOKIE`] cookie whose value should be
+//! copied into the [`XSRF_HEADER`] or [`CSRF_HEADER`] header on subsequent
+//! unsafe requests protected by [`VerifiedXsrf`]:
+//!
+//! ```rust
+//! # #[macro_use] extern crate rocket;
+//! use rocket::http::Status;
+//! use rocket_csrf::{Csrf, VerifiedXsrf, XsrfToken};
+//!
+//! #[get("/api/bootstrap")]
+//! fn bootstrap(_xsrf: XsrfToken) -> Status {
+//!     Status::NoContent
+//! }
+//!
+//! #[post("/api/update")]
+//! fn update(_xsrf: VerifiedXsrf) -> Status {
+//!     Status::Accepted
+//! }
+//!
+//! # #[launch]
+//! fn rocket() -> _ {
+//!     rocket::build()
+//!         .attach(Csrf::fairing())
+//!         .mount("/", routes![bootstrap, update])
+//! }
+//! ```
+//!
+//! This pattern matches the conventions used by many JavaScript frameworks:
+//! the server delivers a readable `XSRF-TOKEN` cookie and the client echoes that
+//! value in an `X-XSRF-TOKEN` or `X-CSRF-Token` header.
+//!
+//! ## Security Model
+//!
+//! This crate uses server-issued, cryptographically signed tokens bound to an
+//! opaque private session cookie. Token validation checks:
+//!
+//!   * the token signature
+//!   * the issuing session
+//!   * the token context (form vs. header)
+//!   * the active key rotation window
+//!
+//! Tokens are not stored server-side. Instead, Rocket stores the CSRF session in
+//! private cookies and validates the token against that session and the current
+//! signing keys.
+//!
+//! ## Configuration
+//!
+//! This crate reads configuration from the `csrf` figment profile section via
+//! [`Config`]. The defaults are generally suitable for development and can be
+//! customized if needed.
+//!
+//! Setting [`Config::enable`] to `false` disables installation of CSRF state.
+//! Applications that do so must also avoid mounting routes that use the guards
+//! from this crate.
+
+#![doc(html_root_url = "https://api.rocket.rs/master/rocket_csrf")]
+#![doc(html_favicon_url = "https://rocket.rs/images/favicon.ico")]
+#![doc(html_logo_url = "https://rocket.rs/images/logo-boxed.png")]
+
+#[macro_use]
+extern crate rocket;
+
+mod config;
+mod error;
+mod fairing;
+mod session;
+mod token;
+
+use std::fmt;
+use std::ops::{Deref, DerefMut};
+
+use rocket::{Ignite, Phase, Request, Rocket, Sentinel};
+use rocket::data::{self, Data, FromData};
+use rocket::form::{self, FromForm, ParsedField, Parser};
+use rocket::http::{Cookie, Status};
+use rocket::request::{self, FromRequest};
+
+use crate::error::{CsrfError, MissingFairing};
+use crate::session::{Session, SessionId};
+use crate::token::{Token, Tokenizer};
+
+pub use crate::config::Config;
+
+/// The hidden form field name used by [`CsrfToken`] and [`CsrfForm<T>`].
+pub const FORM_FIELD: &str = "_authenticity_token";
+
+/// The readable cookie name used by [`XsrfToken`].
+pub const XSRF_COOKIE: &str = "XSRF-TOKEN";
+
+/// The primary header name accepted by [`VerifiedXsrf`].
+pub const XSRF_HEADER: &str = "X-XSRF-TOKEN";
+
+/// A compatibility header name also accepted by [`VerifiedXsrf`].
+pub const CSRF_HEADER: &str = "X-CSRF-Token";
+
+const MISSING_FAIRING_MESSAGE: &str = "uninitialized csrf context: missing `Csrf::fairing()`.
+To use `CsrfToken` or `CsrfForm<T>`, you must attach `Csrf::fairing()`.";
+
+#[derive(Debug)]
+struct CsrfState {
+    config: Config,
+    tokenizer: Tokenizer,
+}
+
+/// Entry point for attaching CSRF protection to a Rocket instance.
+///
+/// Attach [`Csrf::fairing()`] once during ignition to enable [`CsrfToken`],
+/// [`CsrfForm<T>`], [`XsrfToken`], and [`VerifiedXsrf`]. These guards install a
+/// launch-time sentinel and will abort launch when used without the fairing.
+pub struct Csrf;
+
+/// A request guard that mints a form-context CSRF token.
+///
+/// Use this on a safe route, typically a `GET`, and render the resulting token
+/// into a hidden form field named [`FORM_FIELD`]. The token implements
+/// [`Display`](std::fmt::Display), so `csrf.to_string()` or string formatting is
+/// sufficient for rendering.
+#[derive(Debug, Clone)]
+pub struct CsrfToken(Token);
+
+/// A request guard that mints a header-context XSRF token and queues the
+/// [`XSRF_COOKIE`] cookie.
+///
+/// Use this on a safe route or bootstrap endpoint that is called before a
+/// JavaScript client sends unsafe requests. The client should read the
+/// [`XSRF_COOKIE`] cookie and send its value back in the [`XSRF_HEADER`] or
+/// [`CSRF_HEADER`] header on routes protected by [`VerifiedXsrf`].
+#[derive(Debug, Clone)]
+pub struct XsrfToken(Token);
+
+/// A data guard that validates a form-context CSRF token and then parses the
+/// remainder of the request body as `T`.
+///
+/// This guard is intended for routes that accept HTML form submissions. The
+/// form must include a hidden [`FORM_FIELD`] field populated from a
+/// [`CsrfToken`].
+///
+/// Semantics intentionally mirror `rocket::form::Form<T>` as closely as
+/// possible:
+///
+///   * non-form content-types forward
+///   * ordinary form validation errors are preserved
+///   * CSRF failures return `403 Forbidden`
+///
+/// For multipart forms, the [`FORM_FIELD`] field must appear before any file or
+/// data fields so the token can be validated before Rocket streams uploaded
+/// data into the inner form parser.
+#[derive(Debug)]
+pub struct CsrfForm<T>(T);
+
+/// A request guard that validates header-based XSRF protection.
+///
+/// This guard requires a token in either [`XSRF_HEADER`] or [`CSRF_HEADER`] and
+/// validates that token against the active session and header-token context.
+/// It is intended for unsafe API routes invoked by JavaScript clients.
+#[derive(Debug, Copy, Clone)]
+pub struct VerifiedXsrf;
+
+impl Csrf {
+    /// Returns the fairing that installs CSRF managed state.
+    ///
+    /// This fairing must be attached before any route uses [`CsrfToken`],
+    /// [`CsrfForm<T>`], [`XsrfToken`], or [`VerifiedXsrf`].
+    pub fn fairing() -> impl rocket::fairing::Fairing {
+        fairing::fairing()
+    }
+}
+
+impl CsrfState {
+    fn new(config: Config) -> Self {
+        Self {
+            tokenizer: Tokenizer::new(config.rotate),
+            config,
+        }
+    }
+
+    fn issue_form_token(&self, session: SessionId) -> Token {
+        self.tokenizer.form_token(session)
+    }
+
+    fn verify_form_token(&self, token: &Token, session: &Session) -> Result<(), CsrfError> {
+        self.tokenizer.verify_form(token, session)
+    }
+
+    fn issue_xsrf_token(&self, session: SessionId) -> Token {
+        self.tokenizer.header_token(session)
+    }
+
+    fn verify_xsrf_token(&self, token: &Token, session: &Session) -> Result<(), CsrfError> {
+        self.tokenizer.verify_header(token, session)
+    }
+}
+
+impl CsrfToken {
+    fn issue(req: &Request<'_>, state: &CsrfState) -> Self {
+        let session = Session::fetch(req, state.config.session_ttl());
+        let session_id = session.id();
+        Self(state.issue_form_token(session_id))
+    }
+}
+
+impl XsrfToken {
+    fn issue(req: &Request<'_>, state: &CsrfState) -> Self {
+        let session = Session::fetch(req, state.config.session_ttl());
+        let token = state.issue_xsrf_token(session.id());
+        req.cookies().add(
+            Cookie::build((XSRF_COOKIE, token.to_string()))
+                .http_only(false)
+                .expires(now_plus(state)),
+        );
+
+        Self(token)
+    }
+}
+
+impl<T> CsrfForm<T> {
+    /// Consumes `self` and returns the parsed inner value.
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> Deref for CsrfForm<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for CsrfForm<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl fmt::Display for CsrfToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl fmt::Display for XsrfToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for CsrfToken {
+    type Error = ();
+
+    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        match state(req.rocket()) {
+            Some(state) => request::Outcome::Success(Self::issue(req, state)),
+            None => {
+                log_missing_fairing();
+                request::Outcome::Error((Status::InternalServerError, ()))
+            }
+        }
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for XsrfToken {
+    type Error = ();
+
+    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        match state(req.rocket()) {
+            Some(state) => request::Outcome::Success(Self::issue(req, state)),
+            None => {
+                log_missing_fairing();
+                request::Outcome::Error((Status::InternalServerError, ()))
+            }
+        }
+    }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for VerifiedXsrf {
+    type Error = ();
+
+    async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
+        let state = match state(req.rocket()) {
+            Some(state) => state,
+            None => {
+                log_missing_fairing();
+                return request::Outcome::Error((Status::InternalServerError, ()));
+            }
+        };
+
+        let session = match Session::find(req, state.config.session_ttl()) {
+            Some(session) => session,
+            None => return request::Outcome::Error((Status::Forbidden, ())),
+        };
+
+        let token = match header_token(req) {
+            Ok(token) => token,
+            Err(_) => return request::Outcome::Error((Status::Forbidden, ())),
+        };
+
+        match state.verify_xsrf_token(&token, &session) {
+            Ok(()) => request::Outcome::Success(VerifiedXsrf),
+            Err(_) => request::Outcome::Error((Status::Forbidden, ())),
+        }
+    }
+}
+
+#[rocket::async_trait]
+impl<'r, T: FromForm<'r>> FromData<'r> for CsrfForm<T> {
+    type Error = form::Errors<'r>;
+
+    async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> data::Outcome<'r, Self> {
+        let state = match state(req.rocket()) {
+            Some(state) => state,
+            None => {
+                log_missing_fairing();
+                return data::Outcome::Error((
+                    Status::InternalServerError,
+                    MissingFairing::into_form_errors(),
+                ));
+            }
+        };
+
+        let mut parser = match Parser::new(req, data).await {
+            data::Outcome::Success(parser) => parser,
+            data::Outcome::Error((status, errors)) => return data::Outcome::Error((status, errors)),
+            data::Outcome::Forward(forward) => return data::Outcome::Forward(forward),
+        };
+
+        let session = match Session::find(req, state.config.session_ttl()) {
+            Some(session) => session,
+            None => {
+                let errors = form::Errors::from(CsrfError::MissingSession.into_form_error());
+                return data::Outcome::Error((Status::Forbidden, errors));
+            }
+        };
+
+        let mut context = T::init(form::Options::Lenient);
+        let mut token_verified = false;
+        let mut token_error = None;
+
+        while let Some(field) = parser.next().await {
+            match field {
+                Ok(ParsedField::Value(value)) if value.name == FORM_FIELD => {
+                    if token_verified || token_error.is_some() {
+                        token_error = Some(CsrfError::DuplicateToken);
+                        continue;
+                    }
+
+                    match value.value.parse::<Token>() {
+                        Ok(parsed) => match state.verify_form_token(&parsed, &session) {
+                            Ok(()) => token_verified = true,
+                            Err(error) => token_error = Some(error),
+                        },
+                        Err(_) => token_error = Some(CsrfError::InvalidToken),
+                    }
+                }
+                Ok(ParsedField::Data(data)) if data.name == FORM_FIELD => {
+                    token_error = Some(CsrfError::InvalidToken);
+                }
+                Ok(ParsedField::Data(_)) if !token_verified => {
+                    let error = token_error.take().unwrap_or(CsrfError::MissingToken);
+                    let errors = form::Errors::from(error.into_form_error());
+                    return data::Outcome::Error((Status::Forbidden, errors));
+                }
+                Ok(ParsedField::Value(value)) => T::push_value(&mut context, value),
+                Ok(ParsedField::Data(data)) => T::push_data(&mut context, data).await,
+                Err(e) => T::push_error(&mut context, e),
+            }
+        }
+
+        if let Some(error) = token_error
+            .or_else(|| (!token_verified).then_some(CsrfError::MissingToken))
+        {
+            let errors = form::Errors::from(error.into_form_error());
+            return data::Outcome::Error((Status::Forbidden, errors));
+        }
+
+        match T::finalize(context) {
+            Ok(value) => data::Outcome::Success(CsrfForm(value)),
+            Err(e) => data::Outcome::Error((e.status(), e)),
+        }
+    }
+}
+
+impl Sentinel for CsrfToken {
+    fn abort(rocket: &Rocket<Ignite>) -> bool {
+        if state(rocket).is_none() {
+            log_missing_fairing();
+            return true;
+        }
+
+        false
+    }
+}
+
+impl Sentinel for XsrfToken {
+    fn abort(rocket: &Rocket<Ignite>) -> bool {
+        if state(rocket).is_none() {
+            log_missing_fairing();
+            return true;
+        }
+
+        false
+    }
+}
+
+impl<T> Sentinel for CsrfForm<T> {
+    fn abort(rocket: &Rocket<Ignite>) -> bool {
+        if state(rocket).is_none() {
+            log_missing_fairing();
+            return true;
+        }
+
+        false
+    }
+}
+
+impl Sentinel for VerifiedXsrf {
+    fn abort(rocket: &Rocket<Ignite>) -> bool {
+        if state(rocket).is_none() {
+            log_missing_fairing();
+            return true;
+        }
+
+        false
+    }
+}
+
+fn state<P: Phase>(rocket: &Rocket<P>) -> Option<&CsrfState> {
+    rocket.state::<CsrfState>()
+}
+
+fn log_missing_fairing() {
+    error!("{MISSING_FAIRING_MESSAGE}");
+}
+
+fn header_token(req: &Request<'_>) -> Result<Token, CsrfError> {
+    let mut token = None;
+
+    for header in [XSRF_HEADER, CSRF_HEADER] {
+        for value in req.headers().get(header) {
+            if token.is_some() {
+                return Err(CsrfError::DuplicateToken);
+            }
+
+            token = Some(value.parse().map_err(|_| CsrfError::InvalidToken)?);
+        }
+    }
+
+    token.ok_or(CsrfError::MissingToken)
+}
+
+fn now_plus(state: &CsrfState) -> rocket::time::OffsetDateTime {
+    rocket::time::OffsetDateTime::now_utc() + state.config.session_ttl()
+}
