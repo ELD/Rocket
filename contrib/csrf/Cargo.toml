@@ -17,7 +17,9 @@ workspace = true
 
 [dependencies]
 base64 = "0.22"
-blake3 = "1.5"
+# 1.5.x supports the crate's declared Rust 1.75 MSRV; newer releases
+# resolve constant_time_eq 0.4, which requires Rust 1.85.
+blake3 = "=1.5.5"
 rand = "0.9"
 subtle = "2.5"
 
@@ -26,6 +28,10 @@ version = "0.6.0-dev"
 path = "../../core/lib"
 default-features = false
 features = ["secrets"]
+
+[dev-dependencies.rocket]
+path = "../../core/lib"
+features = ["json"]
 
 [package.metadata.docs.rs]
 all-features = true

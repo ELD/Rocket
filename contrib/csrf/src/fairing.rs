@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use rocket::{Build, Rocket};
 use rocket::fairing::{self, AdHoc, Fairing};
 use rocket::figment::providers::Serialized;
@@ -24,7 +26,16 @@ pub(crate) fn fairing() -> impl Fairing {
 
 fn attach(rocket: Rocket<Build>, config: Config) -> fairing::Result {
     match config.validate() {
-        Ok(()) => Ok(rocket.manage(CsrfState::new(config))),
+        Ok(()) => Ok(rocket.manage(CsrfState::new(config)).attach(
+            AdHoc::on_response("CSRF Token Cache Policy", |req, response| Box::pin(async move {
+                if req.local_cache(|| crate::IssuedToken(AtomicBool::new(false)))
+                    .0
+                    .load(Ordering::Relaxed)
+                {
+                    response.set_raw_header("Cache-Control", "no-store");
+                }
+            })),
+        )),
         Err(message) => {
             error!("invalid csrf configuration: {message}");
             Err(rocket)

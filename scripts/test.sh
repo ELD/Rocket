@@ -104,6 +104,9 @@ function test_contrib() {
     tungstenite
   )
 
+  echo ":: Building and testing csrf..."
+  $CARGO test -p rocket_csrf $@
+
   for feature in "${DB_POOLS_FEATURES[@]}"; do
     echo ":: Building and testing db_pools [$feature]..."
     $CARGO test -p rocket_db_pools --no-default-features --features $feature $@
@@ -159,6 +162,22 @@ function test_examples() {
   indir "${EXAMPLES_DIR}" $CARGO update
   ROCKET_SECRET_KEY="itlYmFR2vYKrOmFhupMIn/hyB6lYCCTXz4yaQX89XVg=" \
     indir "${EXAMPLES_DIR}" $CARGO test --all $@
+
+  if ! command -v node > /dev/null 2>&1; then
+    echo "Node.js 20 or newer is required for the CSRF example JavaScript tests."
+    exit 1
+  fi
+
+  local node_version="$(node --version)"
+  local node_major="${node_version#v}"
+  node_major="${node_major%%.*}"
+  if (( node_major < 20 )); then
+    echo "Node.js 20 or newer is required; found ${node_version}."
+    exit 1
+  fi
+
+  echo ":: Testing CSRF example JavaScript client..."
+  node --test "${EXAMPLES_DIR}/csrf/tests/csrf-client.test.mjs"
 }
 
 function test_default() {

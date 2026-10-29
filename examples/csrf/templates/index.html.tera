@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Rocket CSRF Example</title>
+  </head>
+  <body>
+    <h1>Explicit CSRF Example</h1>
+    <p>This form uses <code>CsrfToken</code> and <code>CsrfForm&lt;T&gt;</code>.</p>
+    <form action="/" method="post">
+      <input type="hidden" name="_authenticity_token" value="{{ csrf }}">
+      <label>
+        Message
+        <input type="text" name="message" value="Hello, Rocket!">
+      </label>
+      <button type="submit">Send</button>
+    </form>
+    <hr>
+    <h2>JavaScript API Example</h2>
+    <p>
+      The script below requests a token as JSON, then sends it back in the
+      <code>X-XSRF-TOKEN</code> header.
+    </p>
+    <button id="api-send" type="button">Send API Request</button>
+    <pre id="api-result">waiting...</pre>
+    <script type="module" src="/static/csrf-client.js"></script>
+  </body>
+</html>

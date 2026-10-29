@@ -10,6 +10,9 @@
 //! server. Tokens are scoped to a request context, so a token minted for form
 //! submission cannot be replayed as an XSRF header token, and vice versa.
 //!
+//! Protection is opt-in per route: attaching the fairing alone does not protect
+//! unsafe routes. Use the appropriate verification guard on every such route.
+//!
 //! ## Usage
 //!
 //! Attach [`Csrf::fairing()`] and use the guards that match your routes.
@@ -36,11 +39,11 @@
 //! #[get("/login")]
 //! fn login(csrf: CsrfToken) -> RawHtml<String> {
 //!     RawHtml(format!(
-//!         r#"<form action=\"/login\" method=\"post\">
-//!             <input type=\"hidden\" name=\"_authenticity_token\" value=\"{csrf}\">
-//!             <input type=\"text\" name=\"username\">
-//!             <input type=\"password\" name=\"password\">
-//!             <button type=\"submit\">Sign In</button>
+//!         r#"<form action="/login" method="post">
+//!             <input type="hidden" name="_authenticity_token" value="{csrf}">
+//!             <input type="text" name="username">
+//!             <input type="password" name="password">
+//!             <button type="submit">Sign In</button>
 //!         </form>"#,
 //!     ))
 //! }
@@ -97,6 +100,27 @@
 //! the server delivers a readable `XSRF-TOKEN` cookie and the client echoes that
 //! value in an `X-XSRF-TOKEN` or `X-CSRF-Token` header.
 //!
+//! ### Templates and JSON
+//!
+//! Both token guards implement [`Serialize`](rocket::serde::Serialize) as an
+//! opaque string. Pass them directly to a template context (for example,
+//! `context! { csrf: csrf }`) and render `{{ csrf }}` as the value of a hidden
+//! `_authenticity_token` input. Keep template autoescaping enabled.
+//!
+//! An SPA bootstrap endpoint can return `Json<XsrfToken>` or include an
+//! `XsrfToken` in a serializable response structure. The client sends the
+//! returned string in `X-XSRF-TOKEN`; it need not read `document.cookie`.
+//! Cookies must still accompany both bootstrap and protected requests.
+//! Responses that issue tokens receive `Cache-Control: no-store`. A rejected
+//! [`VerifiedXsrf`] guard defaults to `403` without a retry marker: Rocket lets
+//! routes absorb guard failures with `Option` or `Result`, so a response fairing
+//! cannot safely infer that the handler did not run. Routes that want an SPA
+//! retry signal should return [`CsrfGuardError`] explicitly, and propagate the
+//! guard result with `xsrf?` before any side effects. Only its rejection
+//! responder sets [`CSRF_ERROR_HEADER`] to [`CSRF_ERROR_VALUE`]. Keep a
+//! client-side single-flight promise around initial bootstrap calls: requests
+//! arriving without a cookie cannot coordinate their session statelessly.
+//!
 //! ## Security Model
 //!
 //! This crate uses server-issued, cryptographically signed tokens bound to an
@@ -107,9 +131,27 @@
 //!   * the token context (form vs. header)
 //!   * the active key rotation window
 //!
+//! Signing keys are domain-separated derivatives of Rocket's `secret_key`.
+//! Replicas using the same persistent secret and CSRF configuration accept each
+//! other's tokens, including after restarts; sticky routing is not required.
+//! Rotation is anchored to UTC Unix-epoch periods rather than process startup.
+//! Keep replica clocks synchronized. The previous period's tokens are accepted
+//! only during the configured overlap window at the start of a new period.
+//! Configure a stable `ROCKET_SECRET_KEY` (or `secret_key` in Rocket.toml) on
+//! every replica. Debug-mode auto-generated secrets are intentionally ephemeral.
+//! Changing the secret invalidates both existing tokens and private cookies.
+//! Tokens are reusable until expiration, not one-time nonces. Use HTTPS in
+//! production and do not expose bootstrap responses through permissive CORS.
+//! The default cookies are host-only and SameSite=Strict: same-origin SPAs work
+//! without extra configuration. Truly cross-site frontends require an explicit
+//! cookie/CORS policy not provided by this crate.
+//!
 //! Tokens are not stored server-side. Instead, Rocket stores the CSRF session in
 //! private cookies and validates the token against that session and the current
-//! signing keys.
+//! signing keys. Session cookies renew after half their configured lifetime on
+//! requests that use a CSRF guard. A previous session ID remains valid only until
+//! its original expiry; renewal never extends that ID, and browsers may discard
+//! its cookie at that same expiry.
 //!
 //! ## Configuration
 //!
@@ -136,6 +178,8 @@ mod token;
 
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 
 use rocket::{Ignite, Phase, Request, Rocket, Sentinel};
 use rocket::data::{self, Data, FromData};
@@ -144,10 +188,13 @@ use rocket::http::{Cookie, Status};
 use rocket::request::{self, FromRequest};
 
 use crate::error::{CsrfError, MissingFairing};
-use crate::session::{Session, SessionId};
+use crate::session::Session;
 use crate::token::{Token, Tokenizer};
 
-pub use crate::config::Config;
+pub use crate::config::{Config, Rotate};
+
+// Request-local marker used to avoid caching token-bearing responses.
+struct IssuedToken(AtomicBool);
 
 /// The hidden form field name used by [`CsrfToken`] and [`CsrfForm<T>`].
 pub const FORM_FIELD: &str = "_authenticity_token";
@@ -161,13 +208,22 @@ pub const XSRF_HEADER: &str = "X-XSRF-TOKEN";
 /// A compatibility header name also accepted by [`VerifiedXsrf`].
 pub const CSRF_HEADER: &str = "X-CSRF-Token";
 
+/// Response header set by the explicit [`CsrfGuardError::Rejected`] responder.
+///
+/// A normal failed [`VerifiedXsrf`] guard does not set this header because
+/// `Option` and `Result` guards can absorb failures and still run the handler.
+pub const CSRF_ERROR_HEADER: &str = "X-Rocket-CSRF";
+
+/// Value of [`CSRF_ERROR_HEADER`] for an explicitly returned CSRF rejection.
+pub const CSRF_ERROR_VALUE: &str = "csrf-failure";
+
 const MISSING_FAIRING_MESSAGE: &str = "uninitialized csrf context: missing `Csrf::fairing()`.
-To use `CsrfToken` or `CsrfForm<T>`, you must attach `Csrf::fairing()`.";
+To use CSRF guards, you must attach `Csrf::fairing()`.";
 
 #[derive(Debug)]
 struct CsrfState {
     config: Config,
-    tokenizer: Tokenizer,
+    tokenizer: OnceLock<Tokenizer>,
 }
 
 /// Entry point for attaching CSRF protection to a Rocket instance.
@@ -182,7 +238,8 @@ pub struct Csrf;
 /// Use this on a safe route, typically a `GET`, and render the resulting token
 /// into a hidden form field named [`FORM_FIELD`]. The token implements
 /// [`Display`](std::fmt::Display), so `csrf.to_string()` or string formatting is
-/// sufficient for rendering.
+/// sufficient for rendering. It also implements [`Serialize`](rocket::serde::Serialize)
+/// as a string for direct use in template contexts.
 #[derive(Debug, Clone)]
 pub struct CsrfToken(Token);
 
@@ -192,7 +249,8 @@ pub struct CsrfToken(Token);
 /// Use this on a safe route or bootstrap endpoint that is called before a
 /// JavaScript client sends unsafe requests. The client should read the
 /// [`XSRF_COOKIE`] cookie and send its value back in the [`XSRF_HEADER`] or
-/// [`CSRF_HEADER`] header on routes protected by [`VerifiedXsrf`].
+/// [`CSRF_HEADER`] header on routes protected by [`VerifiedXsrf`]. Alternatively,
+/// serialize this guard directly in a JSON response; it serializes as a string.
 #[derive(Debug, Clone)]
 pub struct XsrfToken(Token);
 
@@ -220,9 +278,53 @@ pub struct CsrfForm<T>(T);
 ///
 /// This guard requires a token in either [`XSRF_HEADER`] or [`CSRF_HEADER`] and
 /// validates that token against the active session and header-token context.
-/// It is intended for unsafe API routes invoked by JavaScript clients.
+/// A failed guard returns `403` without a retry marker. See [`CsrfGuardError`]
+/// for the explicit, safe-to-propagate response used by retry-capable routes.
 #[derive(Debug, Copy, Clone)]
 pub struct VerifiedXsrf;
+
+/// An explicit response for a rejected XSRF guard or missing CSRF fairing.
+///
+/// Use this with `Result<VerifiedXsrf, CsrfGuardError>` and propagate the guard
+/// result before performing side effects. Only [`Rejected`](Self::Rejected)
+/// emits the CSRF retry marker. A missing fairing remains an internal-server
+/// error and never emits a retry marker.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum CsrfGuardError {
+    /// The XSRF guard rejected the request.
+    Rejected,
+    /// The CSRF fairing is not attached.
+    MissingFairing,
+}
+
+impl fmt::Display for CsrfGuardError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Rejected => "CSRF validation failed",
+            Self::MissingFairing => "missing `Csrf::fairing()`",
+        })
+    }
+}
+
+impl std::error::Error for CsrfGuardError {}
+
+impl<'r> rocket::response::Responder<'r, 'static> for CsrfGuardError {
+    fn respond_to(self, _: &'r Request<'_>) -> rocket::response::Result<'static> {
+        let mut response = rocket::Response::build();
+        match self {
+            Self::Rejected => {
+                response
+                    .status(Status::Forbidden)
+                    .raw_header(CSRF_ERROR_HEADER, CSRF_ERROR_VALUE);
+            }
+            Self::MissingFairing => {
+                response.status(Status::InternalServerError);
+            }
+        }
+
+        response.ok()
+    }
+}
 
 impl Csrf {
     /// Returns the fairing that installs CSRF managed state.
@@ -237,40 +339,40 @@ impl Csrf {
 impl CsrfState {
     fn new(config: Config) -> Self {
         Self {
-            tokenizer: Tokenizer::new(config.rotate),
+            tokenizer: OnceLock::new(),
             config,
         }
     }
 
-    fn issue_form_token(&self, session: SessionId) -> Token {
-        self.tokenizer.form_token(session)
-    }
-
-    fn verify_form_token(&self, token: &Token, session: &Session) -> Result<(), CsrfError> {
-        self.tokenizer.verify_form(token, session)
-    }
-
-    fn issue_xsrf_token(&self, session: SessionId) -> Token {
-        self.tokenizer.header_token(session)
-    }
-
-    fn verify_xsrf_token(&self, token: &Token, session: &Session) -> Result<(), CsrfError> {
-        self.tokenizer.verify_header(token, session)
+    fn tokenizer(&self, req: &Request<'_>) -> &Tokenizer {
+        // The final secret (including debug-mode generation) is only available
+        // after ignition, so do not derive from the figment in the fairing.
+        self.tokenizer.get_or_init(|| {
+            let root = req.rocket().config().secret_key
+                .derive_key("rocket_csrf signing root v1");
+            Tokenizer::new(self.config.rotate, root)
+        })
     }
 }
 
 impl CsrfToken {
     fn issue(req: &Request<'_>, state: &CsrfState) -> Self {
+        req.local_cache(|| IssuedToken(AtomicBool::new(false)))
+            .0
+            .store(true, Ordering::Relaxed);
         let session = Session::fetch(req, state.config.session_ttl());
         let session_id = session.id();
-        Self(state.issue_form_token(session_id))
+        Self(state.tokenizer(req).form_token(session_id))
     }
 }
 
 impl XsrfToken {
     fn issue(req: &Request<'_>, state: &CsrfState) -> Self {
+        req.local_cache(|| IssuedToken(AtomicBool::new(false)))
+            .0
+            .store(true, Ordering::Relaxed);
         let session = Session::fetch(req, state.config.session_ttl());
-        let token = state.issue_xsrf_token(session.id());
+        let token = state.tokenizer(req).header_token(session.id());
         req.cookies().add(
             Cookie::build((XSRF_COOKIE, token.to_string()))
                 .http_only(false)
@@ -299,6 +401,18 @@ impl<T> Deref for CsrfForm<T> {
 impl<T> DerefMut for CsrfForm<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl rocket::serde::Serialize for CsrfToken {
+    fn serialize<S: rocket::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl rocket::serde::Serialize for XsrfToken {
+    fn serialize<S: rocket::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
     }
 }
 
@@ -346,30 +460,33 @@ impl<'r> FromRequest<'r> for XsrfToken {
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for VerifiedXsrf {
-    type Error = ();
+    type Error = CsrfGuardError;
 
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         let state = match state(req.rocket()) {
             Some(state) => state,
             None => {
                 log_missing_fairing();
-                return request::Outcome::Error((Status::InternalServerError, ()));
+                return request::Outcome::Error((
+                    Status::InternalServerError,
+                    CsrfGuardError::MissingFairing,
+                ));
             }
         };
 
         let session = match Session::find(req, state.config.session_ttl()) {
             Some(session) => session,
-            None => return request::Outcome::Error((Status::Forbidden, ())),
+            None => return csrf_forbidden(),
         };
 
         let token = match header_token(req) {
             Ok(token) => token,
-            Err(_) => return request::Outcome::Error((Status::Forbidden, ())),
+            Err(_) => return csrf_forbidden(),
         };
 
-        match state.verify_xsrf_token(&token, &session) {
+        match state.tokenizer(req).verify_header(&token, &session) {
             Ok(()) => request::Outcome::Success(VerifiedXsrf),
-            Err(_) => request::Outcome::Error((Status::Forbidden, ())),
+            Err(_) => csrf_forbidden(),
         }
     }
 }
@@ -417,7 +534,7 @@ impl<'r, T: FromForm<'r>> FromData<'r> for CsrfForm<T> {
                     }
 
                     match value.value.parse::<Token>() {
-                        Ok(parsed) => match state.verify_form_token(&parsed, &session) {
+                        Ok(parsed) => match state.tokenizer(req).verify_form(&parsed, &session) {
                             Ok(()) => token_verified = true,
                             Err(error) => token_error = Some(error),
                         },
@@ -427,7 +544,7 @@ impl<'r, T: FromForm<'r>> FromData<'r> for CsrfForm<T> {
                 Ok(ParsedField::Data(data)) if data.name == FORM_FIELD => {
                     token_error = Some(CsrfError::InvalidToken);
                 }
-                Ok(ParsedField::Data(_)) if !token_verified => {
+                Ok(ParsedField::Data(_)) if !token_verified || token_error.is_some() => {
                     let error = token_error.take().unwrap_or(CsrfError::MissingToken);
                     let errors = form::Errors::from(error.into_form_error());
                     return data::Outcome::Error((Status::Forbidden, errors));
@@ -502,6 +619,10 @@ fn state<P: Phase>(rocket: &Rocket<P>) -> Option<&CsrfState> {
 
 fn log_missing_fairing() {
     error!("{MISSING_FAIRING_MESSAGE}");
+}
+
+fn csrf_forbidden() -> request::Outcome<VerifiedXsrf, CsrfGuardError> {
+    request::Outcome::Error((Status::Forbidden, CsrfGuardError::Rejected))
 }
 
 fn header_token(req: &Request<'_>) -> Result<Token, CsrfError> {

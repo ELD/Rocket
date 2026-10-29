@@ -8,3 +8,7 @@ publish = false
 [dependencies]
 rocket = { path = "../../core/lib", features = ["secrets", "json"] }
 rocket_csrf = { path = "../../contrib/csrf" }
+
+[dependencies.rocket_dyn_templates]
+path = "../../contrib/dyn_templates"
+features = ["tera"]

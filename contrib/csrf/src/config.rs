@@ -28,18 +28,13 @@ pub struct Config {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct Rotate {
-    /// The total rotation period, in hours.
+    /// The rotation period, in hours, anchored to the Unix epoch (UTC).
+    /// Replicas must use identical rotation settings and synchronized clocks.
     pub period: u16,
 
     /// The overlap window, in hours, during which both the previous and current
     /// signing keys are accepted.
     pub window: u16,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum Phase {
-    Epoch,
-    Window,
 }
 
 impl Default for Config {
@@ -89,27 +84,4 @@ impl Rotate {
         Ok(())
     }
 
-    pub(crate) fn epoch(&self) -> Duration {
-        Duration::hours(i64::from(self.period - self.window))
-    }
-
-    pub(crate) fn window(&self) -> Duration {
-        Duration::hours(i64::from(self.window))
-    }
-}
-
-impl Phase {
-    pub(crate) fn duration(self, rotate: Rotate) -> Duration {
-        match self {
-            Phase::Epoch => rotate.epoch(),
-            Phase::Window => rotate.window(),
-        }
-    }
-
-    pub(crate) fn next(self) -> Self {
-        match self {
-            Phase::Epoch => Phase::Window,
-            Phase::Window => Phase::Epoch,
-        }
-    }
 }
