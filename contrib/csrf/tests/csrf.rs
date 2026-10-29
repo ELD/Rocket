@@ -157,7 +157,8 @@ fn replicas_accept_the_same_tokens_and_private_session() {
 fn tokens_and_sessions_survive_a_server_restart() {
     let (form, header, cookies) = {
         let issuer = Client::tracked(configured_rocket(42)).unwrap();
-        let (form, header): (String, String) = issuer.get("/tokens").dispatch().into_json().unwrap();
+        let (form, header): (String, String) =
+            issuer.get("/tokens").dispatch().into_json().unwrap();
         let cookies: Vec<_> = issuer.cookies().iter().cloned().collect();
         (form, header, cookies)
     };
