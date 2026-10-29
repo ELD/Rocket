@@ -668,7 +668,6 @@ crate::export! {
     /// struct Guard1;
     /// struct Guard2;
     ///
-    /// #[rocket::async_trait]
     /// impl<'r> FromRequest<'r> for Guard1 {
     ///     type Error = ();
     ///
@@ -682,7 +681,6 @@ crate::export! {
     ///     }
     /// }
     ///
-    /// #[rocket::async_trait]
     /// impl<'r> FromRequest<'r> for Guard2 {
     ///     type Error = ();
     ///

@@ -68,7 +68,6 @@ use crate::http::Status;
 /// # struct MyConfig { user_val: String };
 /// struct Item<'r>(&'r str);
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for Item<'r> {
 ///     type Error = ();
 ///
@@ -191,7 +190,6 @@ impl<'r, T: Send + Sync + 'static> From<&'r T> for &'r State<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: Send + Sync + 'static> FromRequest<'r> for &'r State<T> {
     type Error = ();
 

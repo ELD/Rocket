@@ -9,7 +9,6 @@ use std::net::IpAddr;
 use http::Version;
 use rocket_http::HttpVersion;
 use state::{TypeMap, InitCell};
-use futures::future::BoxFuture;
 use ref_swap::OptionRefSwap;
 
 use crate::{Rocket, Route, Orbit};
@@ -835,8 +834,9 @@ impl<'r> Request<'r> {
     /// # })
     /// ```
     #[inline(always)]
-    pub fn guard<'z, 'a, T>(&'a self) -> BoxFuture<'z, Outcome<T, T::Error>>
-        where T: FromRequest<'a> + 'z, 'a: 'z, 'r: 'z
+    pub fn guard<'a, T>(&'a self)
+        -> impl std::future::Future<Output = Outcome<T, T::Error>> + Send + use<'r, 'a, T>
+        where T: FromRequest<'a>
     {
         T::from_request(self)
     }

@@ -314,10 +314,10 @@ impl<T> DerefMut for Form<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: FromForm<'r>> FromData<'r> for Form<T> {
     type Error = Errors<'r>;
 
+    #[crate::async_bound(Send)]
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> Outcome<'r, Self> {
         let mut parser = try_outcome!(Parser::new(req, data).await);
         let mut context = T::init(Options::Lenient);

@@ -15,7 +15,6 @@ struct Login<'r> {
 #[derive(Debug)]
 struct User(usize);
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for User {
     type Error = std::convert::Infallible;
 

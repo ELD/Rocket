@@ -211,7 +211,6 @@ pub struct MessageStream<'r, S> {
     handler: Box<dyn FnOnce(SplitStream<DuplexStream>) -> S + Send + 'r>
 }
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for WebSocket {
     type Error = std::convert::Infallible;
 

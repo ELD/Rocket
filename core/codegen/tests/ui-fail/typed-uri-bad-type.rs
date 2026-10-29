@@ -25,7 +25,7 @@ fn optionals(id: Option<i32>, name: Result<String, &str>) {  }
 
 use rocket::form::{FromFormField, Errors, ValueField, DataField};
 
-#[rocket::async_trait]
+// Native async implementation; retain line numbers for the UI diagnostics.
 impl<'v> FromFormField<'v> for S {
     fn default() -> Option<Self> { None }
 

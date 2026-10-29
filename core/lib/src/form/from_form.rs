@@ -221,7 +221,6 @@ use crate::http::uncased::AsUncased;
 ///      # struct Foo;
 ///      use rocket::form::Options;
 ///
-///      # #[rocket::async_trait]
 ///      # impl<'r> FromForm<'r> for Foo {
 ///          # type Context = std::convert::Infallible;
 ///      fn init(opts: Options) -> Self::Context {
@@ -245,7 +244,6 @@ use crate::http::uncased::AsUncased;
 ///      # struct Foo;
 ///      use rocket::form::{ValueField, DataField};
 ///
-///      # #[rocket::async_trait]
 ///      # impl<'r> FromForm<'r> for Foo {
 ///          # type Context = std::convert::Infallible;
 ///          # fn init(opts: Options) -> Self::Context { todo!() }
@@ -269,7 +267,6 @@ use crate::http::uncased::AsUncased;
 ///      # struct Foo;
 ///      use rocket::form::Result;
 ///
-///      # #[rocket::async_trait]
 ///      # impl<'r> FromForm<'r> for Foo {
 ///          # type Context = std::convert::Infallible;
 ///          # fn init(opts: Options) -> Self::Context { todo!() }
@@ -389,8 +386,8 @@ use crate::http::uncased::AsUncased;
 /// [`FromFormField`].
 ///
 /// An implementation of `FromForm` consists of implementing the three stages
-/// outlined above. `FromForm` is an async trait, so implementations must be
-/// decorated with an attribute of `#[rocket::async_trait]`:
+/// outlined above. Implement its async methods with native `async fn`, without
+/// an attribute macro:
 ///
 /// ```rust
 /// # #[macro_use] extern crate rocket;
@@ -398,7 +395,6 @@ use crate::http::uncased::AsUncased;
 /// # struct MyContext;
 /// use rocket::form::{self, FromForm, DataField, ValueField};
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromForm<'r> for MyType {
 ///     type Context = MyContext;
 ///
@@ -457,7 +453,6 @@ use crate::http::uncased::AsUncased;
 ///     errors: Errors<'v>,
 /// }
 ///
-/// #[rocket::async_trait]
 /// impl<'v, A: FromForm<'v>, B: FromForm<'v>> FromForm<'v> for Pair<A, B> {
 ///     type Context = PairContext<'v, A, B>;
 ///
@@ -528,7 +523,6 @@ use crate::http::uncased::AsUncased;
 ///     }
 /// }
 /// ```
-#[crate::async_trait]
 pub trait FromForm<'r>: Send + Sized {
     /// The form guard's parsing context.
     type Context: Send;
@@ -540,6 +534,7 @@ pub trait FromForm<'r>: Send + Sized {
     fn push_value(ctxt: &mut Self::Context, field: ValueField<'r>);
 
     /// Processes the data field `field`.
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'r, '_>);
 
     /// Processes the external form or field error `_error`.
@@ -609,7 +604,6 @@ impl<'v, T: FromForm<'v>> VecContext<'v, T> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromForm<'v> + 'v> FromForm<'v> for Vec<T> {
     type Context = VecContext<'v, T>;
 
@@ -621,6 +615,7 @@ impl<'v, T: FromForm<'v> + 'v> FromForm<'v> for Vec<T> {
         T::push_value(this.context(&field.name), field.shift());
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(this: &mut Self::Context, field: DataField<'v, '_>) {
         T::push_data(this.context(&field.name), field.shift()).await
     }
@@ -768,7 +763,6 @@ impl<'v, K, V> MapContext<'v, K, V>
     }
 }
 
-#[crate::async_trait]
 impl<'v, K, V> FromForm<'v> for HashMap<K, V>
     where K: FromForm<'v> + Eq + Hash, V: FromForm<'v>
 {
@@ -782,6 +776,7 @@ impl<'v, K, V> FromForm<'v> for HashMap<K, V>
         ctxt.push_value(field);
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         ctxt.push_data(field).await;
     }
@@ -791,7 +786,6 @@ impl<'v, K, V> FromForm<'v> for HashMap<K, V>
     }
 }
 
-#[crate::async_trait]
 impl<'v, K, V> FromForm<'v> for BTreeMap<K, V>
     where K: FromForm<'v> + Ord, V: FromForm<'v>
 {
@@ -805,6 +799,7 @@ impl<'v, K, V> FromForm<'v> for BTreeMap<K, V>
         ctxt.push_value(field);
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         ctxt.push_data(field).await;
     }
@@ -814,7 +809,6 @@ impl<'v, K, V> FromForm<'v> for BTreeMap<K, V>
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromForm<'v>> FromForm<'v> for Option<T> {
     type Context = <T as FromForm<'v>>::Context;
 
@@ -826,6 +820,7 @@ impl<'v, T: FromForm<'v>> FromForm<'v> for Option<T> {
         T::push_value(ctxt, field)
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         T::push_data(ctxt, field).await
     }
@@ -835,7 +830,6 @@ impl<'v, T: FromForm<'v>> FromForm<'v> for Option<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromForm<'v>> FromForm<'v> for Result<'v, T> {
     type Context = <T as FromForm<'v>>::Context;
 
@@ -847,6 +841,7 @@ impl<'v, T: FromForm<'v>> FromForm<'v> for Result<'v, T> {
         T::push_value(ctxt, field)
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         T::push_data(ctxt, field).await
     }
@@ -878,7 +873,6 @@ impl<'v, A: FromForm<'v>, B: FromForm<'v>> PairContext<'v, A, B> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, A: FromForm<'v>, B: FromForm<'v>> FromForm<'v> for (A, B) {
     type Context = PairContext<'v, A, B>;
 
@@ -898,6 +892,7 @@ impl<'v, A: FromForm<'v>, B: FromForm<'v>> FromForm<'v> for (A, B) {
         }
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         match ctxt.context(field.name) {
             Ok(Either::Left(ctxt)) => A::push_data(ctxt, field.shift()).await,
@@ -919,7 +914,6 @@ impl<'v, A: FromForm<'v>, B: FromForm<'v>> FromForm<'v> for (A, B) {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromForm<'v> + Sync> FromForm<'v> for Arc<T> {
     type Context = <T as FromForm<'v>>::Context;
 
@@ -931,6 +925,7 @@ impl<'v, T: FromForm<'v> + Sync> FromForm<'v> for Arc<T> {
         T::push_value(ctxt, field)
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         T::push_data(ctxt, field).await
     }
@@ -952,7 +947,6 @@ macro_rules! impl_via_proxy {
                 }
             }
 
-            #[crate::async_trait]
             impl<'v, $($G: Send),*> FromForm<'v> for $R<$($G),*>
                 where proxy::$T<$($G),*>: FromForm<'v>
             {
@@ -966,6 +960,7 @@ macro_rules! impl_via_proxy {
                     <proxy::$T<$($G),*>>::push_value(ctxt, field)
                 }
 
+                #[crate::async_bound(Send)]
                 async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
                     <proxy::$T<$($G),*>>::push_data(ctxt, field).await
                 }

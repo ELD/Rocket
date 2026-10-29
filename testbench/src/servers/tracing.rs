@@ -32,7 +32,6 @@ impl FromParam<'_> for UseDebug {
     fn from_param(_: &str) -> Result<Self, Self::Error> { Err(Self) }
 }
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for UseDisplay {
     type Error = Self;
     async fn from_request(_: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
@@ -40,7 +39,6 @@ impl<'r> FromRequest<'r> for UseDisplay {
     }
 }
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for UseDebug {
     type Error = Self;
     async fn from_request(_: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
@@ -48,7 +46,6 @@ impl<'r> FromRequest<'r> for UseDebug {
     }
 }
 
-#[rocket::async_trait]
 impl<'r> FromData<'r> for UseDisplay {
     type Error = Self;
     async fn from_data(_: &'r Request<'_>, _: Data<'r>) -> data::Outcome<'r, Self> {
@@ -56,7 +53,6 @@ impl<'r> FromData<'r> for UseDisplay {
     }
 }
 
-#[rocket::async_trait]
 impl<'r> FromData<'r> for UseDebug {
     type Error = Self;
     async fn from_data(_: &'r Request<'_>, _: Data<'r>) -> data::Outcome<'r, Self> {

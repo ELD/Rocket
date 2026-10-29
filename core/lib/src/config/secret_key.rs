@@ -209,7 +209,6 @@ impl PartialEq for SecretKey {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r SecretKey {
     type Error = std::convert::Infallible;
 

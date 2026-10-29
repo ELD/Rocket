@@ -410,7 +410,6 @@ pub type Result<T = Rocket<Build>, E = Rocket<Build>> = std::result::Result<T, E
 /// pub struct StartTime(pub SystemTime);
 ///
 /// // Allows a route to access the time a request was initiated.
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for StartTime {
 ///     type Error = ();
 ///

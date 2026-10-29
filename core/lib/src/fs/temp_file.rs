@@ -535,7 +535,6 @@ impl<'v> TempFile<'v> {
     }
 }
 
-#[crate::async_trait]
 impl<'v> FromFormField<'v> for Capped<TempFile<'v>> {
     fn from_value(field: ValueField<'v>) -> Result<Self, Errors<'v>> {
         let n = N { written: field.value.len() as u64, complete: true  };
@@ -549,7 +548,6 @@ impl<'v> FromFormField<'v> for Capped<TempFile<'v>> {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<TempFile<'_>> {
     type Error = io::Error;
 

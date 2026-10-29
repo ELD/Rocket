@@ -7,7 +7,6 @@ use rocket::http::Status;
 
 struct HasContentType;
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for HasContentType {
     type Error = ();
 
@@ -18,7 +17,6 @@ impl<'r> FromRequest<'r> for HasContentType {
 
 use rocket::data::{self, FromData};
 
-#[rocket::async_trait]
 impl<'r> FromData<'r> for HasContentType {
     type Error = ();
 

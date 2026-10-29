@@ -5,7 +5,6 @@ use rocket::request::{self, Request, FromRequest};
 
 struct Authenticated;
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for Authenticated {
     type Error = std::convert::Infallible;
 
@@ -20,7 +19,6 @@ impl<'r> FromRequest<'r> for Authenticated {
 
 struct TeapotForward;
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for TeapotForward {
     type Error = std::convert::Infallible;
 

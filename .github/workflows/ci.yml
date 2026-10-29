@@ -6,6 +6,49 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  native-async-msrv:
+    name: Native async traits (Rust 1.92)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+    steps:
+      - name: Checkout Sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.92.0
+
+      - name: Install Native Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev libsqlite3-dev pkg-config
+
+      - name: Resolve MSRV-Compatible Dependencies
+        run: |
+          cargo generate-lockfile
+          # 0.2.8 has no MSRV metadata but requires parking_lot 0.13 (Rust 1.95).
+          cargo update -p scheduled-thread-pool --precise 0.2.7
+
+      - name: Test Core, Codegen, CSRF, and WebSockets
+        run: >-
+          cargo test --locked -p rocket -p rocket_codegen -p rocket_csrf -p rocket_ws
+          --features rocket/json,rocket/msgpack,rocket/uuid,rocket/mtls
+
+      - name: Test Async Database Pools
+        run: >-
+          cargo test --locked -p rocket_db_pools --no-default-features
+          --features deadpool_postgres,deadpool_redis,sqlx_sqlite
+
+      - name: Test Sync Database Guards
+        run: >-
+          cargo test --locked -p rocket_sync_db_pools --no-default-features
+          --features sqlite_pool,memcache_pool
+
+      - name: Test Template Guards
+        run: cargo test --locked -p rocket_dyn_templates --all-features
+
   dependency-compatibility:
     name: Fresh database dependency resolution
     runs-on: ubuntu-latest

@@ -221,7 +221,6 @@ impl<K, C: Poolable> Drop for ConnectionPool<K, C> {
     }
 }
 
-#[rocket::async_trait]
 impl<'r, K: 'static, C: Poolable> FromRequest<'r> for Connection<K, C> {
     type Error = ();
 

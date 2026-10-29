@@ -150,7 +150,6 @@ impl Sentinel for Metadata<'_> {
 /// Retrieves the template metadata. If a template fairing hasn't been attached,
 /// an error is printed and an empty `Err` with status `InternalServerError`
 /// (`500`) is returned.
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for Metadata<'r> {
     type Error = ();
 

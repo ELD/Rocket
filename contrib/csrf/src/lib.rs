@@ -428,10 +428,10 @@ impl fmt::Display for XsrfToken {
     }
 }
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for CsrfToken {
     type Error = ();
 
+    #[rocket::async_bound(Send)]
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         match state(req.rocket()) {
             Some(state) => request::Outcome::Success(Self::issue(req, state)),
@@ -443,10 +443,10 @@ impl<'r> FromRequest<'r> for CsrfToken {
     }
 }
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for XsrfToken {
     type Error = ();
 
+    #[rocket::async_bound(Send)]
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         match state(req.rocket()) {
             Some(state) => request::Outcome::Success(Self::issue(req, state)),
@@ -458,10 +458,10 @@ impl<'r> FromRequest<'r> for XsrfToken {
     }
 }
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for VerifiedXsrf {
     type Error = CsrfGuardError;
 
+    #[rocket::async_bound(Send)]
     async fn from_request(req: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
         let state = match state(req.rocket()) {
             Some(state) => state,
@@ -491,10 +491,10 @@ impl<'r> FromRequest<'r> for VerifiedXsrf {
     }
 }
 
-#[rocket::async_trait]
 impl<'r, T: FromForm<'r>> FromData<'r> for CsrfForm<T> {
     type Error = form::Errors<'r>;
 
+    #[rocket::async_bound(Send)]
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> data::Outcome<'r, Self> {
         let state = match state(req.rocket()) {
             Some(state) => state,

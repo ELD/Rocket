@@ -428,7 +428,6 @@ impl Provider for Config {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Config {
     type Error = std::convert::Infallible;
 

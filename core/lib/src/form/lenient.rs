@@ -73,7 +73,6 @@ impl<T> Lenient<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromForm<'v>> FromForm<'v> for Lenient<T> {
     type Context = T::Context;
 
@@ -88,6 +87,7 @@ impl<'v, T: FromForm<'v>> FromForm<'v> for Lenient<T> {
     }
 
     #[inline(always)]
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut Self::Context, field: DataField<'v, '_>) {
         T::push_data(ctxt, field).await
     }

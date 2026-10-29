@@ -116,7 +116,6 @@ impl<'r> Data<'r> {
     /// # struct MyType;
     /// # type MyError = String;
     ///
-    /// #[rocket::async_trait]
     /// impl<'r> FromData<'r> for MyType {
     ///     type Error = MyError;
     ///
