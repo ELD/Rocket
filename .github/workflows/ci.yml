@@ -6,6 +6,35 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  dependency-compatibility:
+    name: Fresh database dependency resolution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Sources
+        uses: actions/checkout@v4
+
+      - name: Install Memcache TLS Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Do not let an existing lockfile hide incompatible driver/pool versions.
+      - name: Resolve Dependencies from Scratch
+        run: cargo generate-lockfile
+
+      - name: Test Deadpool Integrations
+        run: >-
+          cargo test --locked -p rocket_db_pools --no-default-features
+          --features deadpool_postgres,deadpool_redis
+
+      - name: Test Memcache Integration
+        run: >-
+          cargo test --locked -p rocket_sync_db_pools --no-default-features
+          --features memcache_pool
+
   test:
     name: "${{ matrix.platform.name }} ${{ matrix.test.name }} (${{ matrix.platform.toolchain }})"
     runs-on: ${{ matrix.platform.distro }}

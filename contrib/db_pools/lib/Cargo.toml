@@ -46,7 +46,8 @@ features = ["rt_tokio_1", "managed"]
 optional = true
 
 [dependencies.deadpool-postgres]
-version = "0.14"
+# 0.14.2 requires deadpool 0.13, incompatible with our other pool integrations.
+version = "=0.14.1"
 default-features = false
 features = ["rt_tokio_1"]
 optional = true
