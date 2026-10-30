@@ -26,7 +26,7 @@ workspace = true
 default = ["http2", "tokio-macros", "trace"]
 http2 = ["hyper/http2", "hyper-util/http2"]
 http3-preview = ["s2n-quic", "s2n-quic-h3", "tls"]
-secrets = ["cookie/private", "cookie/key-expansion"]
+secrets = ["cookie/private", "cookie/key-expansion", "hkdf", "sha2"]
 json = ["serde_json"]
 msgpack = ["rmp-serde"]
 uuid = ["uuid_", "rocket_http/uuid"]
@@ -40,6 +40,10 @@ trace = ["tracing-subscriber", "tinyvec", "thread_local", "rustls?/logging", "to
 serde_json = { version = "1.0.26", optional = true }
 rmp-serde = { version = "1", optional = true }
 uuid_ = { package = "uuid", version = "1", optional = true, features = ["serde"] }
+
+# Optional secret key derivation dependencies.
+hkdf = { version = "0.12", optional = true }
+sha2 = { version = "0.10", optional = true }
 
 # Optional MTLS dependencies
 x509-parser = { version = "0.16", optional = true }
@@ -62,7 +66,7 @@ parking_lot = "0.12"
 ubyte = {version = "0.10.2", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 figment = { version = "0.10.17", features = ["toml", "env"] }
-rand = "0.8"
+rand = "0.9"
 either = "1"
 pin-project-lite = "0.2"
 indexmap = { version = "2", features = ["serde"] }

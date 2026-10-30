@@ -32,6 +32,10 @@ This directory contains projects showcasing Rocket's features.
   * **[`cookies`](./cookies)** - Uses cookies to create a client-side message
     box. Uses private cookies for a session-based authentication.
 
+  * **[`csrf`](./csrf)** - Demonstrates Rocket's explicit CSRF support with
+    `Csrf::fairing()`, `CsrfToken`, and `CsrfForm<T>` in a simple HTML form
+    workflow.
+
   * **[`databases`](./databases)** - Implements a CRUD-like "blog" JSON API
     backed by a SQLite database driven by each of `sqlx`, `diesel`, and
     `rusqlite`. Runs migrations automatically for the former two drivers. Uses

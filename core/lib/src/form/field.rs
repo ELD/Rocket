@@ -7,7 +7,8 @@ use crate::fs::FileName;
 ///
 /// Rocket preprocesses all form fields into either [`ValueField`]s or
 /// [`DataField`]s. All fields from url-encoded forms, and fields without
-/// Content-Types from multipart forms, are preprocessed as a `ValueField`.
+/// Content-Types or filenames from multipart forms, are preprocessed as a
+/// `ValueField`.
 #[derive(Debug, Clone)]
 pub struct ValueField<'r> {
     /// The (decoded) name of the form field.
@@ -19,9 +20,9 @@ pub struct ValueField<'r> {
 /// A multipart form field with an underlying data stream.
 ///
 /// Rocket preprocesses all form fields into either [`ValueField`]s or
-/// [`DataField`]s. Multipart form fields with a `Content-Type` are preprocessed
-/// as a `DataField`. The underlying data is _not_ read into memory, but
-/// instead, streamable from the contained [`Data`] structure.
+/// [`DataField`]s. Multipart form fields with a `Content-Type` or filename are
+/// preprocessed as a `DataField`. The underlying data is _not_ read into
+/// memory, but instead, streamable from the contained [`Data`] structure.
 pub struct DataField<'r, 'i> {
     /// The (decoded) name of the form field.
     pub name: NameView<'r>,

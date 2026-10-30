@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "config",
   "cookies",
+  "csrf",
   "databases",
   "error-handling",
   "fairings",

@@ -102,6 +102,12 @@ jobs:
           toolchain: ${{ matrix.platform.toolchain }}
           components: rust-src
 
+      - name: Install Node.js for CSRF example JavaScript tests
+        if: matrix.test.name == 'Examples'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Cache Example Workspace
         if: matrix.test.name == 'Examples'
         uses: Swatinem/rust-cache@v2

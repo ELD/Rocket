@@ -131,6 +131,35 @@ impl SecretKey {
         Some(SecretKey { key: Key::try_generate()?, provided: false })
     }
 
+    /// Derives a domain-separated 256-bit application key using HKDF-SHA256.
+    ///
+    /// Use a unique, application-specific `context` for each purpose, including
+    /// a version when changing protocols. The same secret and context always
+    /// produce the same key, independent of process or restart. Derived keys
+    /// must be kept secret; never send them to clients or log them.
+    ///
+    /// This does not expose or reuse the private cookie encryption key.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use rocket::config::SecretKey;
+    /// # let secret = SecretKey::generate().unwrap();
+    /// let application_key = secret.derive_key("my-app signed links v1");
+    /// assert_eq!(application_key, secret.derive_key("my-app signed links v1"));
+    /// ```
+    #[cfg(feature = "secrets")]
+    #[cfg_attr(nightly, doc(cfg(feature = "secrets")))]
+    pub fn derive_key(&self, context: &str) -> [u8; 32] {
+        let hkdf = hkdf::Hkdf::<sha2::Sha256>::new(
+            Some(b"rocket::SecretKey::derive_key/v1"),
+            self.key.master(),
+        );
+        let mut key = [0; 32];
+        hkdf.expand(context.as_bytes(), &mut key).expect("valid HKDF output length");
+        key
+    }
+
     /// Returns `true` if `self` is the `0`-key.
     ///
     /// # Example
@@ -260,5 +289,23 @@ impl fmt::Display for SecretKey {
 impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         <Self as fmt::Display>::fmt(self, f)
+    }
+}
+
+#[cfg(all(test, feature = "secrets"))]
+mod tests {
+    use super::SecretKey;
+
+    #[test]
+    fn derived_keys_are_stable_and_domain_separated() {
+        let first = SecretKey::from(&[42; 64]);
+        let replica = SecretKey::from(&[42; 64]);
+        let other = SecretKey::from(&[43; 64]);
+        let context = "rocket_csrf signing root v1";
+        assert_eq!(first.derive_key(context), replica.derive_key(context));
+        assert_ne!(first.derive_key(context), other.derive_key(context));
+        assert_ne!(first.derive_key(context), first.derive_key("another purpose"));
+        assert_ne!(first.derive_key(context).as_slice(), first.key.signing());
+        assert_ne!(first.derive_key(context).as_slice(), first.key.encryption());
     }
 }

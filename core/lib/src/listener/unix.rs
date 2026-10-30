@@ -2,6 +2,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use either::{Either, Left, Right};
+use figment::error::Kind;
 use tokio::time::{sleep, Duration};
 
 use crate::fs::NamedFile;
@@ -79,8 +80,11 @@ impl Bind for UnixListener {
         let path = endpoint.unix()
             .ok_or_else(|| Right(io::Error::other("internal error: invalid endpoint")))?;
 
-        let reuse: Option<bool> = rocket.figment().extract_inner("reuse").map_err(Left)?;
-        Ok(Self::bind(path, reuse.unwrap_or(true)).await.map_err(Right)?)
+        let reuse: bool = rocket.figment()
+            .extract_inner("reuse")
+            .or_else(|e| if e.missing() { Ok(true) } else { Err(e) } )
+            .map_err(Left)?;
+        Ok(Self::bind(path, reuse).await.map_err(Right)?)
     }
 
     fn bind_endpoint(rocket: &Rocket<Ignite>) -> Result<Endpoint, Self::Error> {
