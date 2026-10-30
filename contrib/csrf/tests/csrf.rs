@@ -116,7 +116,8 @@ fn missing_fairing_response() -> Result<Status, CsrfGuardError> {
 }
 
 fn rocket() -> rocket::Rocket<rocket::Build> {
-    rocket::build()
+    let figment = rocket::Config::figment().merge(("secret_key", vec![42; 64]));
+    rocket::custom(figment)
         .manage(AtomicUsize::new(0))
         .attach(Csrf::fairing())
         .mount("/", routes![
@@ -132,7 +133,9 @@ fn configured_rocket(key: u8) -> rocket::Rocket<rocket::Build> {
 }
 
 fn limited_rocket() -> rocket::Rocket<rocket::Build> {
-    let figment = rocket::Config::figment().merge(("limits.data-form", 512));
+    let figment = rocket::Config::figment()
+        .merge(("limits.data-form", 512))
+        .merge(("secret_key", vec![42; 64]));
     rocket::custom(figment)
         .attach(Csrf::fairing())
         .mount("/", routes![token, upload])
@@ -617,8 +620,9 @@ fn swallowed_guard_failures_that_mutate_are_not_marked_for_retry() {
 
 #[test]
 fn explicit_missing_fairing_response_remains_internal_server_error() {
+    let figment = rocket::Config::figment().merge(("secret_key", vec![42; 64]));
     let client = Client::tracked(
-        rocket::build().mount("/", routes![missing_fairing_response]),
+        rocket::custom(figment).mount("/", routes![missing_fairing_response]),
     ).unwrap();
     let response = client.get("/missing-fairing-response").dispatch();
 
