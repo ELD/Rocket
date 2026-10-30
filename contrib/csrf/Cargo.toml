@@ -10,15 +10,13 @@ readme = "README.md"
 keywords = ["rocket", "web", "framework", "csrf", "security"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.92"
 
 [lints]
 workspace = true
 
 [dependencies]
 base64 = "0.22"
-# 1.5.x supports the crate's declared Rust 1.75 MSRV; newer releases
-# resolve constant_time_eq 0.4, which requires Rust 1.85.
 blake3 = "=1.5.5"
 rand = "0.9"
 subtle = "2.5"

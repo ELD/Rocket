@@ -80,15 +80,14 @@ use crate::form::prelude::*;
 /// can be parsed from either, either directly or by using request-local cache
 /// as an intermediary, and parsing from both should be preferred when sensible.
 ///
-/// `FromFormField` is an async trait, so implementations must be decorated with
-/// an attribute of `#[rocket::async_trait]`:
+/// Implement the async `from_data` method with native `async fn`, without an
+/// attribute macro:
 ///
 /// ```rust
 /// # #[macro_use] extern crate rocket;
 /// # struct MyType;
 /// use rocket::form::{self, FromFormField, DataField, ValueField};
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromFormField<'r> for MyType {
 ///     fn from_value(field: ValueField<'r>) -> form::Result<'r, Self> {
 ///         todo!("parse from a value or use default impl")
@@ -118,7 +117,6 @@ use crate::form::prelude::*;
 ///     data: &'r [u8]
 /// }
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromFormField<'r> for Person<'r> {
 ///     fn from_value(field: ValueField<'r>) -> form::Result<'r, Self> {
 ///         match field.value.find(':') {
@@ -178,7 +176,6 @@ use crate::form::prelude::*;
 // However, blanket implementations of `FromForm` for these traits would result
 // in duplicate implementations of `FromForm`; we need specialization to resolve
 // this concern. Thus, for now, we keep this as one trait.
-#[crate::async_trait]
 pub trait FromFormField<'v>: Send + Sized {
     /// Parse a value of `T` from a form value field.
     ///
@@ -192,6 +189,7 @@ pub trait FromFormField<'v>: Send + Sized {
     ///
     /// The default implementation returns an error of
     /// [`DataField::unexpected()`].
+    #[crate::async_bound(Send)]
     async fn from_data(field: DataField<'v, '_>) -> Result<'v, Self> {
         Err(field.unexpected())?
     }
@@ -235,7 +233,6 @@ impl<'v, T: FromFormField<'v>> FromFieldContext<'v, T> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromFormField<'v>> FromForm<'v> for T {
     type Context = FromFieldContext<'v, T>;
 
@@ -256,6 +253,7 @@ impl<'v, T: FromFormField<'v>> FromForm<'v> for T {
         }
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data(ctxt: &mut FromFieldContext<'v, T>, field: DataField<'v, '_>) {
         if ctxt.should_push() {
             ctxt.push(field.name, Self::from_data(field).await);
@@ -286,12 +284,12 @@ impl<'v, T: FromFormField<'v>> FromForm<'v> for T {
     }
 }
 
-#[crate::async_trait]
 impl<'v> FromFormField<'v> for Capped<&'v str> {
     fn from_value(field: ValueField<'v>) -> Result<'v, Self> {
         Ok(Capped::from(field.value))
     }
 
+    #[crate::async_bound(Send)]
     async fn from_data(f: DataField<'v, '_>) -> Result<'v, Self> {
         use crate::data::{Capped, Outcome, FromData};
 
@@ -307,12 +305,12 @@ impl<'v> FromFormField<'v> for Capped<&'v str> {
 
 impl_strict_from_form_field_from_capped!(&'v str);
 
-#[crate::async_trait]
 impl<'v> FromFormField<'v> for Capped<String> {
     fn from_value(field: ValueField<'v>) -> Result<'v, Self> {
         Ok(Capped::from(field.value.to_string()))
     }
 
+    #[crate::async_bound(Send)]
     async fn from_data(f: DataField<'v, '_>) -> Result<'v, Self> {
         use crate::data::{Capped, Outcome, FromData};
 
@@ -343,12 +341,12 @@ impl<'v> FromFormField<'v> for bool {
     }
 }
 
-#[crate::async_trait]
 impl<'v> FromFormField<'v> for Capped<&'v [u8]> {
     fn from_value(field: ValueField<'v>) -> Result<'v, Self> {
         Ok(Capped::from(field.value.as_bytes()))
     }
 
+    #[crate::async_bound(Send)]
     async fn from_data(f: DataField<'v, '_>) -> Result<'v, Self> {
         use crate::data::{Capped, Outcome, FromData};
 
@@ -364,13 +362,13 @@ impl<'v> FromFormField<'v> for Capped<&'v [u8]> {
 
 impl_strict_from_form_field_from_capped!(&'v [u8]);
 
-#[crate::async_trait]
 impl<'v> FromFormField<'v> for Capped<Cow<'v, str>> {
     fn from_value(field: ValueField<'v>) -> Result<'v, Self> {
         let capped = <Capped<&'v str>>::from_value(field)?;
         Ok(capped.map(|s| s.into()))
     }
 
+    #[crate::async_bound(Send)]
     async fn from_data(field: DataField<'v, '_>) -> Result<'v, Self> {
         let capped = <Capped<&'v str>>::from_data(field).await?;
         Ok(capped.map(|s| s.into()))

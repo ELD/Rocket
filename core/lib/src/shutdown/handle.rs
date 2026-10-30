@@ -134,7 +134,6 @@ impl Future for Shutdown {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for Shutdown {
     type Error = std::convert::Infallible;
 

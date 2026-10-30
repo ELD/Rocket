@@ -22,7 +22,6 @@ struct Inner<'r> {
 
 struct Simple(String);
 
-#[async_trait]
 impl<'r> FromData<'r> for Simple {
     type Error = std::io::Error;
 

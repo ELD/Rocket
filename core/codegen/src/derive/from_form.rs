@@ -160,7 +160,6 @@ pub fn derive_from_form(input: proc_macro::TokenStream) -> TokenStream {
         .outer_mapper(quote!(#[allow(clippy::all, clippy::pedantic, clippy::nursery)]))
         .outer_mapper(quote!(#[allow(renamed_and_removed_lints)]))
         .outer_mapper(quote!(#[allow(private_in_public)]))
-        .outer_mapper(quote!(#[rocket::async_trait]))
         .inner_mapper(MapperBuild::new()
             .try_input_map(|mapper, input| {
                 let (ctxt_ty, gen) = context_type(input)?;
@@ -202,6 +201,7 @@ pub fn derive_from_form(input: proc_macro::TokenStream) -> TokenStream {
                 let (_, ty_gen, _) = gen.split_for_impl();
                 let output = mapper::input_default(mapper, input)?;
                 Ok(quote_spanned! { ctxt_ty.span() =>
+                    #[rocket::async_bound(Send)]
                     async fn push_data(
                         __c: &mut #ctxt_ty #ty_gen,
                         __f: #_form::DataField<'r, '_>
@@ -210,8 +210,6 @@ pub fn derive_from_form(input: proc_macro::TokenStream) -> TokenStream {
                     }
                 })
             })
-            // Without the `let _fut`, we get a wild lifetime error. It don't
-            // make no sense, Rust async/await: it don't make no sense.
             .try_fields_map(|_, f| fields_map(f, |ty, ctxt| quote_spanned!(ty.span() => {
                 let __fut = <#ty as #_form::FromForm<'r>>::push_data(#ctxt, __f.shift());
                 __fut.await;

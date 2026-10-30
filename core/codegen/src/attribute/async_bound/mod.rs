@@ -15,7 +15,6 @@ fn _async_bound(
     }
 
     let mut func: TraitItemFn = syn::parse(input)?;
-    let original: TraitItemFn = func.clone();
     if func.sig.asyncness.is_none() {
         let diag = Span::call_site()
             .error("attribute can only be applied to async fns")
@@ -42,15 +41,16 @@ fn _async_bound(
         ),
     };
 
+    if let Some(body) = func.default.take() {
+        func.default = Some(parse_quote_spanned!(body.span() => {
+            async move #body
+        }));
+    }
+
+    // Keep the same future bounds in rustdoc and rust-analyzer as in builds.
+    // Hiding them behind cfg(doc) breaks Send proofs in dependent crates.
     Ok(quote! {
-        #[cfg(all(not(doc), rust_analyzer))]
-        #original
-
-        #[cfg(all(doc, not(rust_analyzer)))]
         #doc
-        #original
-
-        #[cfg(not(any(doc, rust_analyzer)))]
         #func
     })
 }

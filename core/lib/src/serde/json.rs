@@ -193,7 +193,6 @@ impl<'r, T: Deserialize<'r>> Json<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: Deserialize<'r>> FromData<'r> for Json<T> {
     type Error = Error<'r>;
 
@@ -284,7 +283,6 @@ impl From<Error<'_>> for form::Error<'_> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: Deserialize<'v> + Send> form::FromFormField<'v> for Json<T> {
     fn from_value(field: form::ValueField<'v>) -> Result<Self, form::Errors<'v>> {
         Ok(Self::from_str(field.value)?)

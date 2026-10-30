@@ -191,7 +191,6 @@ impl<'r, T: Deserialize<'r>> MsgPack<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: Deserialize<'r>> FromData<'r> for MsgPack<T> {
     type Error = Error;
 
@@ -232,7 +231,6 @@ impl<'r, T: Serialize, const COMPACT: bool> Responder<'r, 'static> for MsgPack<T
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: Deserialize<'v> + Send> form::FromFormField<'v> for MsgPack<T> {
     // TODO: To implement `from_value`, we need to the raw string so we can
     // decode it into bytes as opposed to a string as it won't be UTF-8.

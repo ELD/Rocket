@@ -239,7 +239,6 @@ impl<'r> FlashMessage<'r> {
 ///
 /// The suggested use is through an `Option` and the `FlashMessage` type alias
 /// in `request`: `Option<FlashMessage>`.
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for FlashMessage<'r> {
     type Error = ();
 

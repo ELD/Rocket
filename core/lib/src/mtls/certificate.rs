@@ -47,7 +47,6 @@ use crate::http::Status;
 /// // A request guard that authenticates and authorizes an administrator.
 /// struct CertifiedAdmin<'r>(Certificate<'r>);
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for CertifiedAdmin<'r> {
 ///     type Error = mtls::Error;
 ///
@@ -107,7 +106,6 @@ pub struct Certificate<'a> {
 
 pub use rustls::pki_types::CertificateDer;
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for Certificate<'r> {
     type Error = Error;
 

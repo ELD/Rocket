@@ -108,7 +108,6 @@ async fn state_sentinel_works() {
 
 struct Data;
 
-#[crate::async_trait]
 impl<'r> data::FromData<'r> for Data {
     type Error = Error;
     async fn from_data(_: &'r Request<'_>, _: data::Data<'r>) -> data::Outcome<'r, Self> {

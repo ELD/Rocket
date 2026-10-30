@@ -1,3 +1,13 @@
+# Unreleased
+
+  * The minimum supported Rust version is now **1.92**.
+  * `FromRequest`, `FromData`, `FromForm`, `FromFormField`, and
+    `rocket_db_pools::Pool` now use native async trait methods. Remove
+    `#[rocket::async_trait]` from implementations of these traits. Dynamically
+    dispatched traits continue to require the attribute. See the
+    [migration notes](docs/async-trait-migration.md).
+  * `Request::guard()` now returns an unboxed `Send` future.
+
 # Version 0.5.1 (May 22, 2024)
 
 This release contains the following crate updates:

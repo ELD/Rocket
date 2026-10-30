@@ -199,11 +199,11 @@ mod erased;
 /// ```
 ///
 /// All `impl`s for a trait declared with `#[async_trait]` must themselves be
-/// decorated with `#[async_trait]`. Many of Rocket's traits, such as
-/// [`FromRequest`](crate::request::FromRequest) and
-/// [`Fairing`](crate::fairing::Fairing) are `async`. As such, implementations
-/// of said traits must be decorated with `#[async_trait]`. See the individual
-/// trait docs for trait-specific details.
+/// decorated with `#[async_trait]`. Rocket's dynamically dispatched traits,
+/// including [`Fairing`](crate::fairing::Fairing), route and catcher handlers,
+/// I/O handlers, and TLS resolvers, still require this attribute. Request, data,
+/// and form guards instead use native `async fn` without this attribute.
+/// See the individual trait docs for trait-specific details.
 ///
 /// For more details on `#[async_trait]`, see [`async_trait`](mod@async_trait).
 #[doc(inline)]

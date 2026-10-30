@@ -29,15 +29,14 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 ///
 /// ## Async Trait
 ///
-/// [`FromRequest`] is an _async_ trait. Implementations of `FromRequest` must
-/// be decorated with an attribute of `#[rocket::async_trait]`:
+/// [`FromRequest`] uses native async trait methods. Implementations use `async fn`
+/// directly, without an attribute macro:
 ///
 /// ```rust
 /// use rocket::request::{self, Request, FromRequest};
 /// # struct MyType;
 /// # type MyError = String;
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for MyType {
 ///     type Error = MyError;
 ///
@@ -215,7 +214,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 ///     Invalid,
 /// }
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for ApiKey<'r> {
 ///     type Error = ApiKeyError;
 ///
@@ -262,7 +260,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 /// #         Ok(User { id, is_admin: false })
 /// #     }
 /// # }
-/// # #[rocket::async_trait]
 /// # impl<'r> FromRequest<'r> for Database {
 /// #     type Error = ();
 /// #     async fn from_request(request: &'r Request<'_>) -> Outcome<Database, ()> {
@@ -272,7 +269,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 /// #
 /// # struct Admin { user: User }
 /// #
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for User {
 ///     type Error = ();
 ///
@@ -286,7 +282,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 ///     }
 /// }
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for Admin {
 ///     type Error = ();
 ///
@@ -327,7 +322,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 /// #         Ok(User { id, is_admin: false })
 /// #     }
 /// # }
-/// # #[rocket::async_trait]
 /// # impl<'r> FromRequest<'r> for Database {
 /// #     type Error = ();
 /// #     async fn from_request(request: &'r Request<'_>) -> Outcome<Database, ()> {
@@ -337,7 +331,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 /// #
 /// # struct Admin<'a> { user: &'a User }
 /// #
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for &'r User {
 ///     type Error = std::convert::Infallible;
 ///
@@ -356,7 +349,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 ///     }
 /// }
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for Admin<'r> {
 ///     type Error = std::convert::Infallible;
 ///
@@ -376,7 +368,6 @@ pub type Outcome<S, E> = outcome::Outcome<S, (Status, E), Status>;
 /// User` and `Admin<'a>`) as the data is now owned by the request's cache.
 ///
 /// [request-local state]: https://rocket.rs/master/guide/state/#request-local-state
-#[crate::async_trait]
 pub trait FromRequest<'r>: Sized {
     /// The associated error to be returned if derivation fails.
     type Error: Debug;
@@ -387,10 +378,10 @@ pub trait FromRequest<'r>: Sized {
     /// the derivation fails in an unrecoverable fashion, `Error` is returned.
     /// `Forward` is returned to indicate that the request should be forwarded
     /// to other matching routes, if any.
+    #[crate::async_bound(Send)]
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error>;
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for Method {
     type Error = Infallible;
 
@@ -399,7 +390,6 @@ impl<'r> FromRequest<'r> for Method {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Origin<'r> {
     type Error = Infallible;
 
@@ -408,7 +398,6 @@ impl<'r> FromRequest<'r> for &'r Origin<'r> {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Host<'r> {
     type Error = Infallible;
 
@@ -420,7 +409,6 @@ impl<'r> FromRequest<'r> for &'r Host<'r> {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Route {
     type Error = Infallible;
 
@@ -432,7 +420,6 @@ impl<'r> FromRequest<'r> for &'r Route {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r CookieJar<'r> {
     type Error = Infallible;
 
@@ -441,7 +428,6 @@ impl<'r> FromRequest<'r> for &'r CookieJar<'r> {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Accept {
     type Error = Infallible;
 
@@ -453,7 +439,6 @@ impl<'r> FromRequest<'r> for &'r Accept {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r ContentType {
     type Error = Infallible;
 
@@ -465,7 +450,6 @@ impl<'r> FromRequest<'r> for &'r ContentType {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for IpAddr {
     type Error = Infallible;
 
@@ -477,7 +461,6 @@ impl<'r> FromRequest<'r> for IpAddr {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for ProxyProto<'r> {
     type Error = std::convert::Infallible;
 
@@ -486,7 +469,6 @@ impl<'r> FromRequest<'r> for ProxyProto<'r> {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Endpoint {
     type Error = Infallible;
 
@@ -495,7 +477,6 @@ impl<'r> FromRequest<'r> for &'r Endpoint {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for SocketAddr {
     type Error = Infallible;
 
@@ -506,10 +487,10 @@ impl<'r> FromRequest<'r> for SocketAddr {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: FromRequest<'r>> FromRequest<'r> for Result<T, T::Error> {
     type Error = Infallible;
 
+    #[crate::async_bound(Send)]
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Infallible> {
         match T::from_request(request).await {
             Success(val) => Success(Ok(val)),
@@ -519,10 +500,10 @@ impl<'r, T: FromRequest<'r>> FromRequest<'r> for Result<T, T::Error> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: FromRequest<'r>> FromRequest<'r> for Option<T> {
     type Error = Infallible;
 
+    #[crate::async_bound(Send)]
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Infallible> {
         match T::from_request(request).await {
             Success(val) => Success(Some(val)),
@@ -531,10 +512,10 @@ impl<'r, T: FromRequest<'r>> FromRequest<'r> for Option<T> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: FromRequest<'r>> FromRequest<'r> for Outcome<T, T::Error> {
     type Error = Infallible;
 
+    #[crate::async_bound(Send)]
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Infallible> {
         Success(T::from_request(request).await)
     }

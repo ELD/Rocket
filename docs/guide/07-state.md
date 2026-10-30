@@ -134,7 +134,6 @@ use rocket::http::Status;
 # struct MyConfig { user_val: String };
 struct Item<'r>(&'r str);
 
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for Item<'r> {
     type Error = ();
 
@@ -186,7 +185,6 @@ static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 struct RequestId(pub usize);
 
 /// Returns the current request's ID, assigning one only as necessary.
-#[rocket::async_trait]
 impl<'r> FromRequest<'r> for &'r RequestId {
     type Error = ();
 

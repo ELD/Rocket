@@ -106,7 +106,6 @@ pub use cookie::{Cookie, SameSite, Iter};
 /// // In practice, we'd probably fetch the user from the database.
 /// struct User(usize);
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromRequest<'r> for User {
 ///     type Error = std::convert::Infallible;
 ///

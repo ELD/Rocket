@@ -174,8 +174,8 @@ pub type Outcome<'r, T, E = <T as FromData<'r>>::Error>
 ///
 /// ## Async Trait
 ///
-/// [`FromData`] is an _async_ trait. Implementations of `FromData` must be
-/// decorated with an attribute of `#[rocket::async_trait]`:
+/// [`FromData`] uses native async trait methods. Implementations use `async fn`
+/// directly, without an attribute macro:
 ///
 /// ```rust
 /// use rocket::request::Request;
@@ -183,7 +183,6 @@ pub type Outcome<'r, T, E = <T as FromData<'r>>::Error>
 /// # struct MyType;
 /// # type MyError = String;
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromData<'r> for MyType {
 ///     type Error = MyError;
 ///
@@ -240,7 +239,6 @@ pub type Outcome<'r, T, E = <T as FromData<'r>>::Error>
 ///     Io(std::io::Error),
 /// }
 ///
-/// #[rocket::async_trait]
 /// impl<'r> FromData<'r> for Person<'r> {
 ///     type Error = Error;
 ///
@@ -300,7 +298,6 @@ pub type Outcome<'r, T, E = <T as FromData<'r>>::Error>
 ///     person.name
 /// }
 /// ```
-#[crate::async_trait]
 pub trait FromData<'r>: Sized {
     /// The associated error to be returned when the guard fails.
     type Error: Send + std::fmt::Debug;
@@ -311,12 +308,12 @@ pub trait FromData<'r>: Sized {
     /// If validation and parsing succeeds, an outcome of `Success` is returned.
     /// If the data is not appropriate given the type of `Self`, `Forward` is
     /// returned. If parsing fails, `Error` is returned.
+    #[crate::async_bound(Send)]
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> Outcome<'r, Self>;
 }
 
 use crate::data::Capped;
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<String> {
     type Error = std::io::Error;
 
@@ -328,7 +325,6 @@ impl<'r> FromData<'r> for Capped<String> {
 
 impl_strict_from_data_from_capped!(String);
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<&'r str> {
     type Error = std::io::Error;
 
@@ -341,7 +337,6 @@ impl<'r> FromData<'r> for Capped<&'r str> {
 
 impl_strict_from_data_from_capped!(&'r str);
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<&'r RawStr> {
     type Error = std::io::Error;
 
@@ -354,7 +349,6 @@ impl<'r> FromData<'r> for Capped<&'r RawStr> {
 
 impl_strict_from_data_from_capped!(&'r RawStr);
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<std::borrow::Cow<'_, str>> {
     type Error = std::io::Error;
 
@@ -366,7 +360,6 @@ impl<'r> FromData<'r> for Capped<std::borrow::Cow<'_, str>> {
 
 impl_strict_from_data_from_capped!(std::borrow::Cow<'_, str>);
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<&'r [u8]> {
     type Error = std::io::Error;
 
@@ -379,7 +372,6 @@ impl<'r> FromData<'r> for Capped<&'r [u8]> {
 
 impl_strict_from_data_from_capped!(&'r [u8]);
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Capped<Vec<u8>> {
     type Error = std::io::Error;
 
@@ -391,7 +383,6 @@ impl<'r> FromData<'r> for Capped<Vec<u8>> {
 
 impl_strict_from_data_from_capped!(Vec<u8>);
 
-#[crate::async_trait]
 impl<'r> FromData<'r> for Data<'r> {
     type Error = std::convert::Infallible;
 
@@ -400,10 +391,10 @@ impl<'r> FromData<'r> for Data<'r> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: FromData<'r> + 'r> FromData<'r> for Result<T, T::Error> {
     type Error = std::convert::Infallible;
 
+    #[crate::async_bound(Send)]
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> Outcome<'r, Self> {
         match T::from_data(req, data).await {
             Success(v) => Success(Ok(v)),
@@ -413,10 +404,10 @@ impl<'r, T: FromData<'r> + 'r> FromData<'r> for Result<T, T::Error> {
     }
 }
 
-#[crate::async_trait]
 impl<'r, T: FromData<'r>> FromData<'r> for Option<T> {
     type Error = std::convert::Infallible;
 
+    #[crate::async_bound(Send)]
     async fn from_data(req: &'r Request<'_>, data: Data<'r>) -> Outcome<'r, Self> {
         match T::from_data(req, data).await {
             Success(v) => Success(Some(v)),

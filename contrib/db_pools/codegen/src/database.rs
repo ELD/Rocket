@@ -58,7 +58,6 @@ pub fn derive_database(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    #[rocket::async_trait]
                     impl<'r> rocket::request::FromRequest<'r> for &'r #decorated_type {
                         type Error = ();
 
@@ -81,7 +80,6 @@ pub fn derive_database(input: TokenStream) -> TokenStream {
                 }
             })
         )
-        .outer_mapper(quote!(#[rocket::async_trait]))
         .inner_mapper(MapperBuild::new()
             .try_struct_map(|_, s| {
                 let db_name = DatabaseAttribute::one_from_attrs("database", &s.attrs)?

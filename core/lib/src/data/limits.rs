@@ -108,7 +108,6 @@ use crate::http::uncased::Uncased;
 ///
 /// # struct MyType;
 /// # type MyError = ();
-/// #[rocket::async_trait]
 /// impl<'r> FromData<'r> for MyType {
 ///     type Error = MyError;
 ///
@@ -312,7 +311,6 @@ impl Limits {
     }
 }
 
-#[crate::async_trait]
 impl<'r> FromRequest<'r> for &'r Limits {
     type Error = std::convert::Infallible;
 

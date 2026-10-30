@@ -15,8 +15,8 @@ use {std::time::Duration, crate::{Error, Config}};
 ///
 /// ## Async Trait
 ///
-/// [`Pool`] is an _async_ trait. Implementations of `Pool` must be decorated
-/// with an attribute of `#[async_trait]`:
+/// [`Pool`] uses native async trait methods. Implementations use `async fn`
+/// directly, without an attribute macro:
 ///
 /// ```rust
 /// # #[macro_use] extern crate rocket;
@@ -26,7 +26,6 @@ use {std::time::Duration, crate::{Error, Config}};
 /// # struct MyPool;
 /// # type Connection = ();
 /// # type Error = std::convert::Infallible;
-/// #[rocket::async_trait]
 /// impl Pool for MyPool {
 ///     type Connection = Connection;
 ///
@@ -84,7 +83,6 @@ use {std::time::Duration, crate::{Error, Config}};
 /// #   async fn shutdown(&self) { }
 /// # }
 ///
-/// #[rocket::async_trait]
 /// impl Pool for MyPool {
 ///     type Connection = Connection;
 ///
@@ -113,7 +111,6 @@ use {std::time::Duration, crate::{Error, Config}};
 ///     }
 /// }
 /// ```
-#[rocket::async_trait]
 pub trait Pool: Sized + Send + 'static {
     /// The connection type managed by this pool, returned by [`Self::get()`].
     type Connection;
@@ -133,6 +130,7 @@ pub trait Pool: Sized + Send + 'static {
     /// This method returns an error if the configuration is not compatible, or
     /// if creating a pool failed due to an unavailable database server,
     /// insufficient resources, or another database-specific error.
+    #[rocket::async_bound(Send)]
     async fn init(figment: &Figment) -> Result<Self, Self::Error>;
 
     /// Asynchronously retrieves a connection from the factory or pool.
@@ -142,6 +140,7 @@ pub trait Pool: Sized + Send + 'static {
     /// This method returns an error if a connection could not be retrieved,
     /// such as a preconfigured timeout elapsing or when the database server is
     /// unavailable.
+    #[rocket::async_bound(Send)]
     async fn get(&self) -> Result<Self::Connection, Self::Error>;
 
     /// Shutdown the connection pool, disallowing any new connections from being
@@ -149,6 +148,7 @@ pub trait Pool: Sized + Send + 'static {
     ///
     /// The returned future may either resolve when all connections are known to
     /// have closed or at any point prior. Details are implementation specific.
+    #[rocket::async_bound(Send)]
     async fn close(&self);
 }
 
@@ -192,7 +192,6 @@ mod deadpool_postgres {
         }
     }
 
-    #[rocket::async_trait]
     impl<M: DeadManager, C: From<Object<M>>> crate::Pool for Pool<M, C>
         where M::Type: Send, C: Send + 'static, M::Error: std::error::Error
     {
@@ -248,7 +247,6 @@ mod sqlx {
         }
     }
 
-    #[rocket::async_trait]
     impl<D: sqlx::Database> crate::Pool for sqlx::Pool<D> {
         type Error = Error<sqlx::Error>;
 
@@ -299,7 +297,6 @@ mod mongodb {
     use mongodb::{Client, options::ClientOptions};
     use super::{Duration, Error, Config, Figment};
 
-    #[rocket::async_trait]
     impl crate::Pool for Client {
         type Error = Error<mongodb::error::Error, std::convert::Infallible>;
 

@@ -215,7 +215,6 @@ macro_rules! impl_strict_from_form_field_from_capped {
         use $crate::form::{FromFormField, ValueField, DataField, Result};
         use $crate::data::Capped;
 
-        #[crate::async_trait]
         impl<'v> FromFormField<'v> for $T {
             fn default() -> Option<Self> {
                 <Capped<$T> as FromFormField<'v>>::default().map(|c| c.value)
@@ -245,7 +244,6 @@ macro_rules! impl_strict_from_form_field_from_capped {
 
 macro_rules! impl_strict_from_data_from_capped {
     ($T:ty) => (
-        #[crate::async_trait]
         impl<'r> $crate::data::FromData<'r> for $T {
             type Error = <$crate::data::Capped<Self> as $crate::data::FromData<'r>>::Error;
 

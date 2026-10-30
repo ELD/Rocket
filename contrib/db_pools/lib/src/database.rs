@@ -278,7 +278,6 @@ impl<D: Database> Fairing for Initializer<D> {
     }
 }
 
-#[rocket::async_trait]
 impl<'r, D: Database> FromRequest<'r> for Connection<D> {
     type Error = Option<<D::Pool as Pool>::Error>;
 

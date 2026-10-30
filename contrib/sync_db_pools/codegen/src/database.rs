@@ -110,7 +110,6 @@ pub fn database_attr(attr: TokenStream, input: TokenStream) -> Result<TokenStrea
             }
         }
 
-        #[#rocket::async_trait]
         impl<'r> #rocket::request::FromRequest<'r> for #guard_type {
             type Error = ();
 

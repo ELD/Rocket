@@ -358,7 +358,6 @@ impl<'f> From<Errors<'f>> for Context<'f> {
     }
 }
 
-#[crate::async_trait]
 impl<'v, T: FromForm<'v>> FromForm<'v> for Contextual<'v, T> {
     type Context = (<T as FromForm<'v>>::Context, Context<'v>);
 
@@ -371,6 +370,7 @@ impl<'v, T: FromForm<'v>> FromForm<'v> for Contextual<'v, T> {
         T::push_value(val_ctxt, field);
     }
 
+    #[crate::async_bound(Send)]
     async fn push_data((ref mut val_ctxt, ctxt): &mut Self::Context, field: DataField<'v, '_>) {
         ctxt.data_fields.insert(field.name.source());
         T::push_data(val_ctxt, field).await;

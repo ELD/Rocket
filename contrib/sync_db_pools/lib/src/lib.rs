@@ -546,43 +546,12 @@ pub mod example {
     /// `Status::ServiceUnavailable` if doing so times out.
     impl<'r> crate::rocket::request::FromRequest<'r> for ExampleDb {
         type Error = ();
-        #[allow(
-            clippy::let_unit_value,
-            clippy::no_effect_underscore_binding,
-            clippy::shadow_same,
-            clippy::type_complexity,
-            clippy::type_repetition_in_bounds,
-            clippy::used_underscore_binding
-        )]
-        fn from_request<'life0, 'async_trait>(
-            __r: &'r crate::rocket::request::Request<'life0>,
-        ) -> ::core::pin::Pin<
-            Box<
-                dyn ::core::future::Future<
-                        Output = crate::rocket::request::Outcome<Self, ()>,
-                    > + ::core::marker::Send
-                    + 'async_trait,
-            >,
-        >
-        where
-            'r: 'async_trait,
-            'life0: 'async_trait,
-            Self: 'async_trait,
-        {
-            Box::pin(async move {
-                if let ::core::option::Option::Some(__ret) = ::core::option::Option::None::<
-                    crate::rocket::request::Outcome<Self, ()>,
-                > {
-                    return __ret;
-                }
-                let __r = __r;
-                let __ret: crate::rocket::request::Outcome<Self, ()> = {
-                    < crate :: Connection < Self , diesel :: SqliteConnection > >
-                        :: from_request (__r) . await . map (Self)
-                };
-                #[allow(unreachable_code)]
-                __ret
-            })
+        async fn from_request(
+            __r: &'r crate::rocket::request::Request<'_>,
+        ) -> crate::rocket::request::Outcome<Self, ()> {
+            <crate::Connection<Self, diesel::SqliteConnection>>::from_request(__r)
+                .await
+                .map(Self)
         }
     }
     impl crate::rocket::Sentinel for ExampleDb {
